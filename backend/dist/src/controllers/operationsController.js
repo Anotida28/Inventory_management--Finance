@@ -9,7 +9,7 @@ var __awaiter = (this && this.__awaiter) || function (thisArg, _arguments, P, ge
     });
 };
 Object.defineProperty(exports, "__esModule", { value: true });
-exports.getSuppliers = exports.getTransfers = exports.getHqStock = exports.getReceivingReceipts = exports.getOperationsOverview = void 0;
+exports.getSuppliers = exports.createIssueRecord = exports.getIssueRecords = exports.getHqStock = exports.getReceivingReceipts = exports.getOperationsOverview = void 0;
 const operationsData_1 = require("../lib/operationsData");
 const getOperationsOverview = (req, res) => __awaiter(void 0, void 0, void 0, function* () {
     try {
@@ -38,15 +38,36 @@ const getHqStock = (req, res) => __awaiter(void 0, void 0, void 0, function* () 
     }
 });
 exports.getHqStock = getHqStock;
-const getTransfers = (req, res) => __awaiter(void 0, void 0, void 0, function* () {
+const getIssueRecords = (req, res) => __awaiter(void 0, void 0, void 0, function* () {
     try {
-        res.json((0, operationsData_1.getTransfersData)());
+        res.json((0, operationsData_1.getIssueRecordsData)());
     }
     catch (error) {
-        res.status(500).json({ message: "Error retrieving transfers" });
+        res.status(500).json({ message: "Error retrieving issue records" });
     }
 });
-exports.getTransfers = getTransfers;
+exports.getIssueRecords = getIssueRecords;
+const createIssueRecord = (req, res) => __awaiter(void 0, void 0, void 0, function* () {
+    try {
+        const { itemName, serialNumber, destinationType, issuedTo, issuedBy, address, issueDate, attachmentNames, notes, } = req.body;
+        const createdRecord = (0, operationsData_1.createIssueRecordData)({
+            itemName,
+            serialNumber,
+            destinationType,
+            issuedTo,
+            issuedBy,
+            address,
+            issueDate,
+            attachmentNames,
+            notes,
+        });
+        res.status(201).json(createdRecord);
+    }
+    catch (error) {
+        res.status(500).json({ message: "Error creating issue record" });
+    }
+});
+exports.createIssueRecord = createIssueRecord;
 const getSuppliers = (req, res) => __awaiter(void 0, void 0, void 0, function* () {
     try {
         res.json((0, operationsData_1.getSuppliersData)());

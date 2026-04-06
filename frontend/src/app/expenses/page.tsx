@@ -1,5 +1,5 @@
 import { redirect } from "next/navigation";
 
 export default function ExpensesRoute() {
-  redirect("/transfers");
+  redirect("/issue-out");
 }

@@ -18,10 +18,7 @@ const statusClassNames: Record<string, string> = {
   "Pending Review": "bg-yellow-100 text-yellow-700",
   Complete: "bg-green-100 text-green-700",
   Missing: "bg-red-100 text-red-700",
-  "Pending Dispatch": "bg-gray-100 text-gray-700",
-  "In Transit": "bg-blue-100 text-blue-700",
-  "Awaiting Acknowledgement": "bg-yellow-100 text-yellow-700",
-  Received: "bg-green-100 text-green-700",
+  Issued: "bg-blue-100 text-blue-700",
 };
 
 const Dashboard = () => {
@@ -53,9 +50,9 @@ const Dashboard = () => {
       Icon: Boxes,
     },
     {
-      title: "Pending Transfers",
-      value: data.pendingTransfers.toString(),
-      description: "Branch requests waiting for dispatch or acknowledgement.",
+      title: "Issue Out Records",
+      value: data.pendingIssues.toString(),
+      description: "Tracked issues to branches and individual staff.",
       Icon: ArrowRightLeft,
     },
     {
@@ -203,10 +200,10 @@ const Dashboard = () => {
         <div className="px-6 pt-5 pb-3 flex items-center justify-between">
           <div>
             <h2 className="text-lg font-semibold text-gray-700">
-              Transfer Queue
+              Issue Out Register
             </h2>
             <p className="text-sm text-gray-400">
-              Branch issues after stock is received at HQ.
+              Items issued from HQ to branches or specific people.
             </p>
           </div>
           <div className="rounded-full p-3 bg-blue-50 border border-blue-100">
@@ -218,35 +215,31 @@ const Dashboard = () => {
           <table className="min-w-full text-sm">
             <thead className="text-left text-gray-500">
               <tr>
-                <th className="py-2 font-medium">Transfer</th>
-                <th className="py-2 font-medium">Branch</th>
-                <th className="py-2 font-medium">Dispatch</th>
-                <th className="py-2 font-medium">Expected</th>
-                <th className="py-2 font-medium">Qty</th>
+                <th className="py-2 font-medium">Issue</th>
+                <th className="py-2 font-medium">Item</th>
+                <th className="py-2 font-medium">Issued To</th>
+                <th className="py-2 font-medium">Type</th>
+                <th className="py-2 font-medium">Date</th>
                 <th className="py-2 font-medium">Status</th>
               </tr>
             </thead>
             <tbody>
-              {data.transferQueue.map((transfer) => (
-                <tr key={transfer.transferId} className="border-t">
+              {data.issueOutQueue.map((issue) => (
+                <tr key={issue.issueId} className="border-t">
                   <td className="py-3 font-semibold text-gray-700">
-                    {transfer.transferId}
+                    {issue.issueId}
                   </td>
-                  <td className="py-3 text-gray-600">{transfer.branchName}</td>
-                  <td className="py-3 text-gray-600">{transfer.dispatchDate}</td>
-                  <td className="py-3 text-gray-600">
-                    {transfer.expectedArrivalDate}
-                  </td>
-                  <td className="py-3 text-gray-600">
-                    {transfer.totalQuantity}
-                  </td>
+                  <td className="py-3 text-gray-600">{issue.itemName}</td>
+                  <td className="py-3 text-gray-600">{issue.issuedTo}</td>
+                  <td className="py-3 text-gray-600">{issue.destinationType}</td>
+                  <td className="py-3 text-gray-600">{issue.issueDate}</td>
                   <td className="py-3">
                     <span
                       className={`px-2.5 py-1 rounded-full text-xs font-medium ${
-                        statusClassNames[transfer.status]
+                        statusClassNames[issue.status]
                       }`}
                     >
-                      {transfer.status}
+                      {issue.status}
                     </span>
                   </td>
                 </tr>

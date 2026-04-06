@@ -126,9 +126,9 @@ const Sidebar = () => {
           isCollapsed={isSidebarCollapsed}
         />
         <SidebarLink
-          href="/transfers"
+          href="/issue-out"
           icon={ArrowRightLeft}
-          label="Transfers"
+          label="Issue Out"
           isCollapsed={isSidebarCollapsed}
         />
         <SidebarLink

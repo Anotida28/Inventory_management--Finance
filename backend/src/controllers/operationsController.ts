@@ -1,10 +1,11 @@
 import { Request, Response } from "express";
 import {
+  createIssueRecordData,
   getHqStockData,
+  getIssueRecordsData,
   getOperationsOverviewData,
   getReceivingReceiptsData,
   getSuppliersData,
-  getTransfersData,
 } from "../lib/operationsData";
 
 export const getOperationsOverview = async (
@@ -40,14 +41,49 @@ export const getHqStock = async (
   }
 };
 
-export const getTransfers = async (
+export const getIssueRecords = async (
   req: Request,
   res: Response
 ): Promise<void> => {
   try {
-    res.json(getTransfersData());
+    res.json(getIssueRecordsData());
   } catch (error) {
-    res.status(500).json({ message: "Error retrieving transfers" });
+    res.status(500).json({ message: "Error retrieving issue records" });
+  }
+};
+
+export const createIssueRecord = async (
+  req: Request,
+  res: Response
+): Promise<void> => {
+  try {
+    const {
+      itemName,
+      serialNumber,
+      destinationType,
+      issuedTo,
+      issuedBy,
+      address,
+      issueDate,
+      attachmentNames,
+      notes,
+    } = req.body;
+
+    const createdRecord = createIssueRecordData({
+      itemName,
+      serialNumber,
+      destinationType,
+      issuedTo,
+      issuedBy,
+      address,
+      issueDate,
+      attachmentNames,
+      notes,
+    });
+
+    res.status(201).json(createdRecord);
+  } catch (error) {
+    res.status(500).json({ message: "Error creating issue record" });
   }
 };
 

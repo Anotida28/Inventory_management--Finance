@@ -1,5 +1,5 @@
-import TransfersPage from "@/screens/transfers";
+import { redirect } from "next/navigation";
 
 export default function TransfersRoute() {
-  return <TransfersPage />;
+  redirect("/issue-out");
 }

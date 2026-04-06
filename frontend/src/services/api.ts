@@ -61,11 +61,11 @@ export interface OperationsOverview {
   totalReceivedValue: number;
   hqUnitsOnHand: number;
   serializedUnits: number;
-  pendingTransfers: number;
+  pendingIssues: number;
   activeSuppliers: number;
   documentsPendingReview: number;
   recentReceipts: ReceivingReceipt[];
-  transferQueue: TransferRecord[];
+  issueOutQueue: IssueRecord[];
   supplierHighlights: Supplier[];
 }
 
@@ -98,21 +98,30 @@ export interface HqStockItem {
   status: "Available" | "Reserved" | "Low Stock";
 }
 
-export interface TransferRecord {
-  transferId: string;
-  branchName: string;
-  dispatchDate: string;
-  expectedArrivalDate: string;
-  status:
-    | "Pending Dispatch"
-    | "In Transit"
-    | "Awaiting Acknowledgement"
-    | "Received";
-  itemCount: number;
-  totalQuantity: number;
-  requestedBy: string;
-  dispatchedBy: string;
-  acknowledgedBy?: string;
+export interface IssueRecord {
+  issueId: string;
+  itemName: string;
+  serialNumber: string;
+  destinationType: "Branch" | "Person";
+  issuedTo: string;
+  issuedBy: string;
+  address: string;
+  issueDate: string;
+  attachmentNames: string[];
+  notes?: string;
+  status: "Issued";
+}
+
+export interface NewIssueRecord {
+  itemName: string;
+  serialNumber: string;
+  destinationType: "Branch" | "Person";
+  issuedTo: string;
+  issuedBy: string;
+  address: string;
+  issueDate: string;
+  attachmentNames?: string[];
+  notes?: string;
 }
 
 export interface Supplier {
@@ -153,9 +162,17 @@ export const api = createApi({
       query: () => "/operations/stock",
       providesTags: ["HqStock"],
     }),
-    getTransfers: build.query<TransferRecord[], void>({
-      query: () => "/operations/transfers",
+    getIssueRecords: build.query<IssueRecord[], void>({
+      query: () => "/operations/issues",
       providesTags: ["Transfers"],
+    }),
+    createIssueRecord: build.mutation<IssueRecord, NewIssueRecord>({
+      query: (newIssueRecord) => ({
+        url: "/operations/issues",
+        method: "POST",
+        body: newIssueRecord,
+      }),
+      invalidatesTags: ["Transfers", "HqStock", "OperationsOverview"],
     }),
     getSuppliers: build.query<Supplier[], void>({
       query: () => "/operations/suppliers",
@@ -195,7 +212,8 @@ export const {
   useGetOperationsOverviewQuery,
   useGetReceivingReceiptsQuery,
   useGetHqStockQuery,
-  useGetTransfersQuery,
+  useGetIssueRecordsQuery,
+  useCreateIssueRecordMutation,
   useGetSuppliersQuery,
   useGetDashboardMetricsQuery,
   useGetProductsQuery,

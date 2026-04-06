@@ -6,6 +6,7 @@ const router = (0, express_1.Router)();
 router.get("/overview", operationsController_1.getOperationsOverview);
 router.get("/receipts", operationsController_1.getReceivingReceipts);
 router.get("/stock", operationsController_1.getHqStock);
-router.get("/transfers", operationsController_1.getTransfers);
+router.get("/issues", operationsController_1.getIssueRecords);
+router.post("/issues", operationsController_1.createIssueRecord);
 router.get("/suppliers", operationsController_1.getSuppliers);
 exports.default = router;

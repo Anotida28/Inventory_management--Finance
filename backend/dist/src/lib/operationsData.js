@@ -1,6 +1,6 @@
 "use strict";
 Object.defineProperty(exports, "__esModule", { value: true });
-exports.getOperationsOverviewData = exports.getTransfersData = exports.getHqStockData = exports.getSuppliersData = exports.getReceivingReceiptsData = void 0;
+exports.getOperationsOverviewData = exports.createIssueRecordData = exports.getIssueRecordsData = exports.getHqStockData = exports.getSuppliersData = exports.getReceivingReceiptsData = void 0;
 const suppliers = [
     {
         supplierId: "SUP-001",
@@ -167,51 +167,58 @@ const hqStockItems = [
         status: "Low Stock",
     },
 ];
-const transfers = [
+const issueRecords = [
     {
-        transferId: "TRF-2026-007",
-        branchName: "Bulawayo Branch",
-        dispatchDate: "2026-04-05",
-        expectedArrivalDate: "2026-04-07",
-        status: "In Transit",
-        itemCount: 2,
-        totalQuantity: 8,
-        requestedBy: "Branch Admin",
-        dispatchedBy: "L. Dlamini",
+        issueId: "ISS-2026-007",
+        itemName: "Lenovo ThinkPad E14",
+        serialNumber: "LNV-E14-240041",
+        destinationType: "Branch",
+        issuedTo: "Bulawayo Branch",
+        issuedBy: "L. Dlamini",
+        address: "12 Jason Moyo Road, Bulawayo",
+        issueDate: "2026-04-05",
+        attachmentNames: ["signed-dispatch-note.pdf", "vehicle-log.jpg"],
+        notes: "Issued for new branch onboarding team.",
+        status: "Issued",
     },
     {
-        transferId: "TRF-2026-006",
-        branchName: "Mutare Branch",
-        dispatchDate: "2026-04-04",
-        expectedArrivalDate: "2026-04-06",
-        status: "Awaiting Acknowledgement",
-        itemCount: 3,
-        totalQuantity: 11,
-        requestedBy: "ICT Lead",
-        dispatchedBy: "P. Chuma",
+        issueId: "ISS-2026-006",
+        itemName: "MikroTik Router RB4011",
+        serialNumber: "MKT-RB4011-7782",
+        destinationType: "Branch",
+        issuedTo: "Mutare Branch",
+        issuedBy: "P. Chuma",
+        address: "16 Herbert Chitepo Street, Mutare",
+        issueDate: "2026-04-04",
+        attachmentNames: ["router-issue-form.pdf"],
+        notes: "Replacement router for branch connectivity upgrade.",
+        status: "Issued",
     },
     {
-        transferId: "TRF-2026-005",
-        branchName: "Gweru Branch",
-        dispatchDate: "2026-04-02",
-        expectedArrivalDate: "2026-04-03",
-        status: "Received",
-        itemCount: 1,
-        totalQuantity: 2,
-        requestedBy: "Branch Admin",
-        dispatchedBy: "S. Mupfumi",
-        acknowledgedBy: "K. Mpofu",
+        issueId: "ISS-2026-005",
+        itemName: "Visitor Access Tablets",
+        serialNumber: "VAT-TAB-1020",
+        destinationType: "Person",
+        issuedTo: "K. Mpofu",
+        issuedBy: "S. Mupfumi",
+        address: "OMDS Gweru Branch, Main Reception",
+        issueDate: "2026-04-02",
+        attachmentNames: [],
+        notes: "Assigned to branch receptionist for visitor sign-in.",
+        status: "Issued",
     },
     {
-        transferId: "TRF-2026-004",
-        branchName: "Masvingo Branch",
-        dispatchDate: "2026-04-06",
-        expectedArrivalDate: "2026-04-08",
-        status: "Pending Dispatch",
-        itemCount: 2,
-        totalQuantity: 5,
-        requestedBy: "Regional Coordinator",
-        dispatchedBy: "Pending",
+        issueId: "ISS-2026-004",
+        itemName: 'HP 24" Monitor',
+        serialNumber: "MON-HP24-3308",
+        destinationType: "Person",
+        issuedTo: "R. Dube",
+        issuedBy: "L. Dlamini",
+        address: "OMDS HQ Finance Office",
+        issueDate: "2026-04-06",
+        attachmentNames: ["desk-allocation-note.pdf"],
+        notes: "Temporary workstation allocation at HQ.",
+        status: "Issued",
     },
 ];
 const getReceivingReceiptsData = () => receivingReceipts;
@@ -220,25 +227,63 @@ const getSuppliersData = () => suppliers;
 exports.getSuppliersData = getSuppliersData;
 const getHqStockData = () => hqStockItems;
 exports.getHqStockData = getHqStockData;
-const getTransfersData = () => transfers;
-exports.getTransfersData = getTransfersData;
+const getIssueRecordsData = () => issueRecords;
+exports.getIssueRecordsData = getIssueRecordsData;
+const createIssueRecordData = (newIssueRecord) => {
+    var _a;
+    const highestIssueSequence = issueRecords.reduce((highest, record) => {
+        var _a;
+        const sequence = Number((_a = record.issueId.split("-").at(-1)) !== null && _a !== void 0 ? _a : 0);
+        return Math.max(highest, sequence);
+    }, 0);
+    const issueId = `ISS-${new Date().getFullYear()}-${String(highestIssueSequence + 1).padStart(3, "0")}`;
+    const createdRecord = {
+        issueId,
+        itemName: newIssueRecord.itemName,
+        serialNumber: newIssueRecord.serialNumber,
+        destinationType: newIssueRecord.destinationType,
+        issuedTo: newIssueRecord.issuedTo,
+        issuedBy: newIssueRecord.issuedBy,
+        address: newIssueRecord.address,
+        issueDate: newIssueRecord.issueDate,
+        attachmentNames: (_a = newIssueRecord.attachmentNames) !== null && _a !== void 0 ? _a : [],
+        notes: newIssueRecord.notes,
+        status: "Issued",
+    };
+    issueRecords.unshift(createdRecord);
+    const matchingStockItem = hqStockItems.find((item) => item.itemName === newIssueRecord.itemName);
+    if (matchingStockItem && matchingStockItem.totalQuantity > 0) {
+        matchingStockItem.totalQuantity -= 1;
+        if (matchingStockItem.serializedUnits > 0) {
+            matchingStockItem.serializedUnits -= 1;
+        }
+        else if (matchingStockItem.nonSerializedUnits > 0) {
+            matchingStockItem.nonSerializedUnits -= 1;
+        }
+        if (matchingStockItem.totalQuantity <= 5) {
+            matchingStockItem.status = "Low Stock";
+        }
+    }
+    return createdRecord;
+};
+exports.createIssueRecordData = createIssueRecordData;
 const getOperationsOverviewData = () => {
     const receiptsThisMonth = receivingReceipts.filter((receipt) => receipt.arrivalDate.startsWith("2026-04")).length;
     const totalReceivedValue = receivingReceipts.reduce((sum, receipt) => sum + receipt.totalAmount, 0);
     const hqUnitsOnHand = hqStockItems.reduce((sum, item) => sum + item.totalQuantity, 0);
     const serializedUnits = hqStockItems.reduce((sum, item) => sum + item.serializedUnits, 0);
-    const pendingTransfers = transfers.filter((transfer) => transfer.status !== "Received").length;
+    const pendingIssues = issueRecords.length;
     const documentsPendingReview = receivingReceipts.filter((receipt) => receipt.documentStatus !== "Complete").length;
     return {
         receiptsThisMonth,
         totalReceivedValue,
         hqUnitsOnHand,
         serializedUnits,
-        pendingTransfers,
+        pendingIssues,
         activeSuppliers: suppliers.length,
         documentsPendingReview,
         recentReceipts: receivingReceipts.slice(0, 4),
-        transferQueue: transfers.slice(0, 4),
+        issueOutQueue: issueRecords.slice(0, 4),
         supplierHighlights: suppliers.slice(0, 3),
     };
 };
