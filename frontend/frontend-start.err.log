@@ -1,8 +1,16 @@
- ⨯ upstream image response failed for https://s3-inventorymanagement.s3.us-east-2.amazonaws.com/profile.jpg 301
- ⨯ upstream image response failed for https://s3-inventorymanagement.s3.us-east-2.amazonaws.com/logo.png 301
- ⨯ upstream image response failed for https://s3-inventorymanagement.s3.us-east-2.amazonaws.com/product1.png 301
- ⨯ upstream image response failed for https://s3-inventorymanagement.s3.us-east-2.amazonaws.com/product2.png 301
- ⨯ upstream image response failed for https://s3-inventorymanagement.s3.us-east-2.amazonaws.com/product3.png 301
- ⨯ upstream image response failed for https://s3-inventorymanagement.s3.us-east-2.amazonaws.com/product3.png 301
- ⨯ upstream image response failed for https://s3-inventorymanagement.s3.us-east-2.amazonaws.com/product1.png 301
- ⨯ upstream image response failed for https://s3-inventorymanagement.s3.us-east-2.amazonaws.com/product2.png 301
+ ⨯ Failed to start server
+Error: listen EADDRINUSE: address already in use :::3000
+    at Server.setupListenHandle [as _listen2] (node:net:2008:16)
+    at listenInCluster (node:net:2065:12)
+    at Server.listen (node:net:2170:7)
+    at C:\Users\om526127\Documents\GitHub\Projects\Inventory_management -Finance\frontend\node_modules\next\dist\server\lib\start-server.js:280:16
+    at new Promise (<anonymous>)
+    at startServer (C:\Users\om526127\Documents\GitHub\Projects\Inventory_management -Finance\frontend\node_modules\next\dist\server\lib\start-server.js:191:11)
+    at Module.nextStart (C:\Users\om526127\Documents\GitHub\Projects\Inventory_management -Finance\frontend\node_modules\next\dist\cli\next-start.js:25:40)
+    at C:\Users\om526127\Documents\GitHub\Projects\Inventory_management -Finance\frontend\node_modules\next\dist\bin\next:105:856 {
+  code: 'EADDRINUSE',
+  errno: -4091,
+  syscall: 'listen',
+  address: '::',
+  port: 3000
+}

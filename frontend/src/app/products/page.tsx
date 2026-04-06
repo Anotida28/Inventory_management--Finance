@@ -1,5 +1,5 @@
-import ProductsPage from "@/screens/products";
+import { redirect } from "next/navigation";
 
 export default function ProductsRoute() {
-  return <ProductsPage />;
+  redirect("/receiving");
 }

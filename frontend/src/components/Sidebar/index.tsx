@@ -4,7 +4,8 @@ import { useAppDispatch, useAppSelector } from "@/services/store";
 import { setIsSidebarCollapsed } from "@/services/uiSlice";
 import {
   Archive,
-  CircleDollarSign,
+  ArrowRightLeft,
+  Building2,
   Clipboard,
   Layout,
   LucideIcon,
@@ -93,7 +94,7 @@ const Sidebar = () => {
             isSidebarCollapsed ? "hidden" : "block"
           } font-extrabold text-2xl`}
         >
-          EDSTOCK
+          OMDS HQ
         </h1>
 
         <button
@@ -113,15 +114,27 @@ const Sidebar = () => {
           isCollapsed={isSidebarCollapsed}
         />
         <SidebarLink
-          href="/inventory"
-          icon={Archive}
-          label="Inventory"
+          href="/receiving"
+          icon={Clipboard}
+          label="Receiving"
           isCollapsed={isSidebarCollapsed}
         />
         <SidebarLink
-          href="/products"
-          icon={Clipboard}
-          label="Products"
+          href="/inventory"
+          icon={Archive}
+          label="HQ Stock"
+          isCollapsed={isSidebarCollapsed}
+        />
+        <SidebarLink
+          href="/transfers"
+          icon={ArrowRightLeft}
+          label="Transfers"
+          isCollapsed={isSidebarCollapsed}
+        />
+        <SidebarLink
+          href="/suppliers"
+          icon={Building2}
+          label="Suppliers"
           isCollapsed={isSidebarCollapsed}
         />
         <SidebarLink
@@ -136,17 +149,13 @@ const Sidebar = () => {
           label="Settings"
           isCollapsed={isSidebarCollapsed}
         />
-        <SidebarLink
-          href="/expenses"
-          icon={CircleDollarSign}
-          label="Expenses"
-          isCollapsed={isSidebarCollapsed}
-        />
       </div>
 
       {/* FOOTER */}
       <div className={`${isSidebarCollapsed ? "hidden" : "block"} mb-10`}>
-        <p className="text-center text-xs text-gray-500">&copy; 2024 Edstock</p>
+        <p className="text-center text-xs text-gray-500">
+          &copy; 2026 OMDS Inventory
+        </p>
       </div>
     </div>
   );

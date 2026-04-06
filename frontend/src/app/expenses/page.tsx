@@ -1,5 +1,5 @@
-import ExpensesPage from "@/screens/expenses";
+import { redirect } from "next/navigation";
 
 export default function ExpensesRoute() {
-  return <ExpensesPage />;
+  redirect("/transfers");
 }

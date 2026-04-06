@@ -6,8 +6,8 @@ import DashboardShell from "@/components/layout/DashboardShell";
 const inter = Inter({ subsets: ["latin"] });
 
 export const metadata: Metadata = {
-  title: "Inventory App",
-  description: "Inventory management dashboard",
+  title: "OMDS Inventory Operations",
+  description: "Receiving, HQ stock control and branch transfer tracking",
 };
 
 export default function RootLayout({

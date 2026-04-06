@@ -1,0 +1,318 @@
+type Supplier = {
+  supplierId: string;
+  name: string;
+  contactPerson: string;
+  phone: string;
+  email: string;
+  categoryFocus: string;
+  lastDeliveryDate: string;
+  activeContracts: number;
+};
+
+type ReceivingReceipt = {
+  receiptId: string;
+  receiptType: "Batch" | "Single Item";
+  supplierId: string;
+  supplierName: string;
+  arrivalDate: string;
+  signedBy: string;
+  receivedBy: string;
+  itemCount: number;
+  totalQuantity: number;
+  totalAmount: number;
+  documentCount: number;
+  documentStatus: "Complete" | "Pending Review" | "Missing";
+  status: "Verified" | "Pending Review" | "Logged";
+};
+
+type HqStockItem = {
+  stockId: string;
+  itemName: string;
+  category: string;
+  totalQuantity: number;
+  serializedUnits: number;
+  nonSerializedUnits: number;
+  supplierName: string;
+  lastArrivalDate: string;
+  storageLocation: string;
+  status: "Available" | "Reserved" | "Low Stock";
+};
+
+type Transfer = {
+  transferId: string;
+  branchName: string;
+  dispatchDate: string;
+  expectedArrivalDate: string;
+  status:
+    | "Pending Dispatch"
+    | "In Transit"
+    | "Awaiting Acknowledgement"
+    | "Received";
+  itemCount: number;
+  totalQuantity: number;
+  requestedBy: string;
+  dispatchedBy: string;
+  acknowledgedBy?: string;
+};
+
+const suppliers: Supplier[] = [
+  {
+    supplierId: "SUP-001",
+    name: "Zim Office Tech",
+    contactPerson: "Tariro Moyo",
+    phone: "+263 77 120 4481",
+    email: "deliveries@zimofficetech.co.zw",
+    categoryFocus: "Computers and Peripherals",
+    lastDeliveryDate: "2026-04-03",
+    activeContracts: 3,
+  },
+  {
+    supplierId: "SUP-002",
+    name: "SecureNet Distribution",
+    contactPerson: "Brian Chikore",
+    phone: "+263 77 344 2109",
+    email: "ops@securenetdistribution.co.zw",
+    categoryFocus: "Networking and Security",
+    lastDeliveryDate: "2026-03-28",
+    activeContracts: 2,
+  },
+  {
+    supplierId: "SUP-003",
+    name: "Office Source Wholesale",
+    contactPerson: "Rudo Dube",
+    phone: "+263 71 889 3410",
+    email: "support@officesource.africa",
+    categoryFocus: "Furniture and Consumables",
+    lastDeliveryDate: "2026-03-19",
+    activeContracts: 1,
+  },
+  {
+    supplierId: "SUP-004",
+    name: "Prime Devices Africa",
+    contactPerson: "Elton Ncube",
+    phone: "+263 78 445 6612",
+    email: "hq@primedevices.africa",
+    categoryFocus: "Mobile and Field Devices",
+    lastDeliveryDate: "2026-04-01",
+    activeContracts: 4,
+  },
+];
+
+const receivingReceipts: ReceivingReceipt[] = [
+  {
+    receiptId: "RCV-2026-004",
+    receiptType: "Batch",
+    supplierId: "SUP-001",
+    supplierName: "Zim Office Tech",
+    arrivalDate: "2026-04-03",
+    signedBy: "L. Dlamini",
+    receivedBy: "Procurement Desk",
+    itemCount: 4,
+    totalQuantity: 26,
+    totalAmount: 18450,
+    documentCount: 3,
+    documentStatus: "Complete",
+    status: "Verified",
+  },
+  {
+    receiptId: "RCV-2026-003",
+    receiptType: "Single Item",
+    supplierId: "SUP-004",
+    supplierName: "Prime Devices Africa",
+    arrivalDate: "2026-04-01",
+    signedBy: "S. Mupfumi",
+    receivedBy: "Stores Officer",
+    itemCount: 1,
+    totalQuantity: 1,
+    totalAmount: 920,
+    documentCount: 2,
+    documentStatus: "Pending Review",
+    status: "Pending Review",
+  },
+  {
+    receiptId: "RCV-2026-002",
+    receiptType: "Batch",
+    supplierId: "SUP-002",
+    supplierName: "SecureNet Distribution",
+    arrivalDate: "2026-03-28",
+    signedBy: "P. Chuma",
+    receivedBy: "Procurement Desk",
+    itemCount: 3,
+    totalQuantity: 18,
+    totalAmount: 12680,
+    documentCount: 1,
+    documentStatus: "Pending Review",
+    status: "Logged",
+  },
+  {
+    receiptId: "RCV-2026-001",
+    receiptType: "Single Item",
+    supplierId: "SUP-003",
+    supplierName: "Office Source Wholesale",
+    arrivalDate: "2026-03-19",
+    signedBy: "T. Moyo",
+    receivedBy: "Stores Officer",
+    itemCount: 1,
+    totalQuantity: 1,
+    totalAmount: 640,
+    documentCount: 0,
+    documentStatus: "Missing",
+    status: "Pending Review",
+  },
+];
+
+const hqStockItems: HqStockItem[] = [
+  {
+    stockId: "STK-001",
+    itemName: "Lenovo ThinkPad E14",
+    category: "Laptop",
+    totalQuantity: 12,
+    serializedUnits: 12,
+    nonSerializedUnits: 0,
+    supplierName: "Zim Office Tech",
+    lastArrivalDate: "2026-04-03",
+    storageLocation: "HQ Cage A1",
+    status: "Available",
+  },
+  {
+    stockId: "STK-002",
+    itemName: "MikroTik Router RB4011",
+    category: "Network",
+    totalQuantity: 6,
+    serializedUnits: 6,
+    nonSerializedUnits: 0,
+    supplierName: "SecureNet Distribution",
+    lastArrivalDate: "2026-03-28",
+    storageLocation: "HQ Cage B2",
+    status: "Available",
+  },
+  {
+    stockId: "STK-003",
+    itemName: 'HP 24" Monitor',
+    category: "Monitor",
+    totalQuantity: 20,
+    serializedUnits: 0,
+    nonSerializedUnits: 20,
+    supplierName: "Zim Office Tech",
+    lastArrivalDate: "2026-04-03",
+    storageLocation: "HQ Rack C4",
+    status: "Reserved",
+  },
+  {
+    stockId: "STK-004",
+    itemName: "Visitor Access Tablets",
+    category: "Tablet",
+    totalQuantity: 3,
+    serializedUnits: 3,
+    nonSerializedUnits: 0,
+    supplierName: "Prime Devices Africa",
+    lastArrivalDate: "2026-04-01",
+    storageLocation: "HQ Cage A3",
+    status: "Available",
+  },
+  {
+    stockId: "STK-005",
+    itemName: "Receipt Folders",
+    category: "Stationery",
+    totalQuantity: 40,
+    serializedUnits: 0,
+    nonSerializedUnits: 40,
+    supplierName: "Office Source Wholesale",
+    lastArrivalDate: "2026-03-19",
+    storageLocation: "HQ Rack D1",
+    status: "Low Stock",
+  },
+];
+
+const transfers: Transfer[] = [
+  {
+    transferId: "TRF-2026-007",
+    branchName: "Bulawayo Branch",
+    dispatchDate: "2026-04-05",
+    expectedArrivalDate: "2026-04-07",
+    status: "In Transit",
+    itemCount: 2,
+    totalQuantity: 8,
+    requestedBy: "Branch Admin",
+    dispatchedBy: "L. Dlamini",
+  },
+  {
+    transferId: "TRF-2026-006",
+    branchName: "Mutare Branch",
+    dispatchDate: "2026-04-04",
+    expectedArrivalDate: "2026-04-06",
+    status: "Awaiting Acknowledgement",
+    itemCount: 3,
+    totalQuantity: 11,
+    requestedBy: "ICT Lead",
+    dispatchedBy: "P. Chuma",
+  },
+  {
+    transferId: "TRF-2026-005",
+    branchName: "Gweru Branch",
+    dispatchDate: "2026-04-02",
+    expectedArrivalDate: "2026-04-03",
+    status: "Received",
+    itemCount: 1,
+    totalQuantity: 2,
+    requestedBy: "Branch Admin",
+    dispatchedBy: "S. Mupfumi",
+    acknowledgedBy: "K. Mpofu",
+  },
+  {
+    transferId: "TRF-2026-004",
+    branchName: "Masvingo Branch",
+    dispatchDate: "2026-04-06",
+    expectedArrivalDate: "2026-04-08",
+    status: "Pending Dispatch",
+    itemCount: 2,
+    totalQuantity: 5,
+    requestedBy: "Regional Coordinator",
+    dispatchedBy: "Pending",
+  },
+];
+
+export const getReceivingReceiptsData = () => receivingReceipts;
+
+export const getSuppliersData = () => suppliers;
+
+export const getHqStockData = () => hqStockItems;
+
+export const getTransfersData = () => transfers;
+
+export const getOperationsOverviewData = () => {
+  const receiptsThisMonth = receivingReceipts.filter((receipt) =>
+    receipt.arrivalDate.startsWith("2026-04")
+  ).length;
+  const totalReceivedValue = receivingReceipts.reduce(
+    (sum, receipt) => sum + receipt.totalAmount,
+    0
+  );
+  const hqUnitsOnHand = hqStockItems.reduce(
+    (sum, item) => sum + item.totalQuantity,
+    0
+  );
+  const serializedUnits = hqStockItems.reduce(
+    (sum, item) => sum + item.serializedUnits,
+    0
+  );
+  const pendingTransfers = transfers.filter(
+    (transfer) => transfer.status !== "Received"
+  ).length;
+  const documentsPendingReview = receivingReceipts.filter(
+    (receipt) => receipt.documentStatus !== "Complete"
+  ).length;
+
+  return {
+    receiptsThisMonth,
+    totalReceivedValue,
+    hqUnitsOnHand,
+    serializedUnits,
+    pendingTransfers,
+    activeSuppliers: suppliers.length,
+    documentsPendingReview,
+    recentReceipts: receivingReceipts.slice(0, 4),
+    transferQueue: transfers.slice(0, 4),
+    supplierHighlights: suppliers.slice(0, 3),
+  };
+};
