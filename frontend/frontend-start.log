@@ -1,0 +1,9 @@
+
+> inventory-management@0.1.0 start
+> next start --port 3000
+
+  ▲ Next.js 14.2.4
+  - Local:        http://localhost:3000
+
+ ✓ Starting...
+ ✓ Ready in 539ms

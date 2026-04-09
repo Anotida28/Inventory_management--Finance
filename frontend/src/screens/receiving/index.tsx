@@ -1,12 +1,16 @@
 "use client";
 
 import Header from "@/components/Header";
-import { useGetReceivingReceiptsQuery } from "@/services/api";
+import {
+  ReceivingReceipt,
+  useGetReceivingReceiptsQuery,
+} from "@/services/api";
 import { DataGrid, GridColDef } from "@mui/x-data-grid";
-import { FileUp, PackagePlus, ShieldCheck } from "lucide-react";
 import numeral from "numeral";
+import BatchReceiptPanel from "./BatchReceiptPanel";
+import ManualReceiptPanel from "./ManualReceiptPanel";
 
-const columns: GridColDef[] = [
+const columns: GridColDef<ReceivingReceipt>[] = [
   { field: "receiptId", headerName: "Receipt", width: 140 },
   { field: "receiptType", headerName: "Type", width: 120 },
   { field: "supplierName", headerName: "Supplier", width: 200 },
@@ -24,6 +28,37 @@ const columns: GridColDef[] = [
   { field: "documentCount", headerName: "Docs", width: 90 },
   { field: "documentStatus", headerName: "Documents", width: 150 },
   { field: "status", headerName: "Status", width: 140 },
+  {
+    field: "attachments",
+    headerName: "Attachment Links",
+    width: 240,
+    sortable: false,
+    renderCell: ({ row }) => {
+      if (row.attachments.length === 0) {
+        return <span className="text-xs text-gray-400">-</span>;
+      }
+
+      const firstAttachment = row.attachments[0];
+
+      return (
+        <div className="truncate">
+          <a
+            href={firstAttachment.downloadUrl}
+            target="_blank"
+            rel="noreferrer"
+            className="text-xs text-blue-600 hover:underline"
+          >
+            {firstAttachment.originalName}
+          </a>
+          {row.attachments.length > 1 && (
+            <span className="ml-2 text-xs text-gray-400">
+              +{row.attachments.length - 1} more
+            </span>
+          )}
+        </div>
+      );
+    },
+  },
 ];
 
 const Receiving = () => {
@@ -62,74 +97,8 @@ const Receiving = () => {
         </p>
       </div>
 
-      <div className="grid grid-cols-1 lg:grid-cols-3 gap-5">
-        <div className="bg-white shadow-md rounded-2xl border border-gray-100 p-5">
-          <div className="flex items-center gap-3">
-            <div className="rounded-full p-3 bg-blue-50 border border-blue-100">
-              <PackagePlus className="w-5 h-5 text-blue-600" />
-            </div>
-            <div>
-              <h2 className="text-lg font-semibold text-gray-700">
-                Manual Receipt
-              </h2>
-              <p className="text-sm text-gray-400">
-                Best for a single item or a short delivery.
-              </p>
-            </div>
-          </div>
-          <p className="mt-4 text-sm text-gray-600">
-            Capture serial number, quantity, amount, supplier, signed by,
-            arrival date, and supporting documents.
-          </p>
-          <button className="mt-5 px-4 py-2 bg-blue-500 text-white rounded hover:bg-blue-700">
-            New Manual Receipt
-          </button>
-        </div>
-
-        <div className="bg-white shadow-md rounded-2xl border border-gray-100 p-5">
-          <div className="flex items-center gap-3">
-            <div className="rounded-full p-3 bg-blue-50 border border-blue-100">
-              <FileUp className="w-5 h-5 text-blue-600" />
-            </div>
-            <div>
-              <h2 className="text-lg font-semibold text-gray-700">
-                Batch Upload
-              </h2>
-              <p className="text-sm text-gray-400">
-                Use Excel for larger bulk deliveries.
-              </p>
-            </div>
-          </div>
-          <p className="mt-4 text-sm text-gray-600">
-            Prepare columns for item name, serial number, quantity, and
-            purchase amount. Supplier and arrival details stay on the receipt.
-          </p>
-          <button className="mt-5 px-4 py-2 bg-blue-500 text-white rounded hover:bg-blue-700">
-            Upload Batch Sheet
-          </button>
-        </div>
-
-        <div className="bg-white shadow-md rounded-2xl border border-gray-100 p-5">
-          <div className="flex items-center gap-3">
-            <div className="rounded-full p-3 bg-blue-50 border border-blue-100">
-              <ShieldCheck className="w-5 h-5 text-blue-600" />
-            </div>
-            <div>
-              <h2 className="text-lg font-semibold text-gray-700">
-                Required on Receipt
-              </h2>
-              <p className="text-sm text-gray-400">
-                Minimum control fields for HQ intake.
-              </p>
-            </div>
-          </div>
-          <ul className="mt-4 space-y-2 text-sm text-gray-600">
-            <li>Item name, serial number, quantity, purchase amount</li>
-            <li>Supplier, date of arrival, signed by, received by</li>
-            <li>Invoice, delivery note, signed receiving documents</li>
-          </ul>
-        </div>
-      </div>
+      <ManualReceiptPanel />
+      <BatchReceiptPanel />
 
       <div className="grid grid-cols-1 md:grid-cols-4 gap-4">
         <div className="bg-white shadow rounded-2xl border border-gray-100 p-5">
@@ -161,6 +130,7 @@ const Receiving = () => {
         columns={columns}
         getRowId={(row) => row.receiptId}
         checkboxSelection
+        disableRowSelectionOnClick
         className="bg-white shadow rounded-lg border border-gray-200 !text-gray-700"
       />
     </div>

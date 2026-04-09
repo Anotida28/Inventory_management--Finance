@@ -1,26 +1,38 @@
-
-> server@1.0.0 start
-> npm run build && node dist/src/index.js
-
-
-> server@1.0.0 build
-> rimraf dist && npx tsc
-
 Server running on port 3001
-127.0.0.1 - - [06/Apr/2026:11:24:38 +0000] "GET /dashboard HTTP/1.1" 200 4994
-127.0.0.1 - - [06/Apr/2026:11:24:38 +0000] "GET /products HTTP/1.1" 200 4546
-127.0.0.1 - - [06/Apr/2026:11:26:27 +0000] "GET /dashboard HTTP/1.1" 200 4994
-127.0.0.1 - - [06/Apr/2026:11:26:43 +0000] "GET /products? HTTP/1.1" 200 4546
-127.0.0.1 - - [06/Apr/2026:11:26:46 +0000] "GET /products? HTTP/1.1" 304 -
-127.0.0.1 - - [06/Apr/2026:11:26:52 +0000] "GET /users HTTP/1.1" 200 2849
-127.0.0.1 - - [06/Apr/2026:11:27:02 +0000] "GET /expenses HTTP/1.1" 200 9355
-127.0.0.1 - - [06/Apr/2026:11:28:29 +0000] "GET /users HTTP/1.1" 304 -
-127.0.0.1 - - [06/Apr/2026:11:28:30 +0000] "GET /products? HTTP/1.1" 304 -
-127.0.0.1 - - [06/Apr/2026:11:28:36 +0000] "GET /dashboard HTTP/1.1" 304 -
-127.0.0.1 - - [06/Apr/2026:11:29:09 +0000] "GET /products? HTTP/1.1" 304 -
-127.0.0.1 - - [06/Apr/2026:11:45:37 +0000] "GET /products? HTTP/1.1" 304 -
-127.0.0.1 - - [06/Apr/2026:11:45:45 +0000] "GET /products? HTTP/1.1" 304 -
-127.0.0.1 - - [06/Apr/2026:11:47:00 +0000] "GET /users HTTP/1.1" 304 -
-127.0.0.1 - - [06/Apr/2026:11:51:47 +0000] "GET /dashboard HTTP/1.1" 304 -
-127.0.0.1 - - [06/Apr/2026:11:53:23 +0000] "GET /products? HTTP/1.1" 304 -
-127.0.0.1 - - [06/Apr/2026:11:58:31 +0000] "GET /products? HTTP/1.1" 304 -
+127.0.0.1 - - [07/Apr/2026:06:49:16 +0000] "GET /operations/issues HTTP/1.1" 200 2209
+127.0.0.1 - - [07/Apr/2026:06:49:50 +0000] "GET /operations/serial-assets?itemName=Lenovo%20ThinkPad%20E14 HTTP/1.1" 200 2311
+127.0.0.1 - - [07/Apr/2026:06:50:28 +0000] "GET /operations/serial-assets?itemName=Lenovo%20ThinkPad%20E14 HTTP/1.1" 200 2311
+127.0.0.1 - - [07/Apr/2026:06:50:28 +0000] "POST /operations/issues HTTP/1.1" 201 866
+127.0.0.1 - - [07/Apr/2026:06:50:53 +0000] "GET /operations/attachments/ISS-2026-010-ATT-001/download HTTP/1.1" 200 39
+127.0.0.1 - - [07/Apr/2026:06:50:53 +0000] "GET /operations/issues HTTP/1.1" 200 3076
+127.0.0.1 - - [07/Apr/2026:06:51:25 +0000] "GET /operations/serial-assets?itemName=Lenovo%20ThinkPad%20E14 HTTP/1.1" 200 2080
+127.0.0.1 - - [07/Apr/2026:06:51:25 +0000] "POST /operations/issues HTTP/1.1" 400 70
+127.0.0.1 - - [07/Apr/2026:06:51:26 +0000] "GET /operations/serial-assets?itemName=Lenovo%20ThinkPad%20E14 HTTP/1.1" 200 2080
+127.0.0.1 - - [07/Apr/2026:06:51:26 +0000] "POST /operations/issues HTTP/1.1" 400 70
+127.0.0.1 - - [07/Apr/2026:06:55:05 +0000] "GET /operations/issues HTTP/1.1" 200 2209
+127.0.0.1 - - [07/Apr/2026:06:55:05 +0000] "GET /operations/serial-assets?itemName=Lenovo%20ThinkPad%20E14 HTTP/1.1" 200 2311
+127.0.0.1 - - [07/Apr/2026:06:55:05 +0000] "GET /operations/stock HTTP/1.1" 200 1290
+127.0.0.1 - - [07/Apr/2026:06:55:25 +0000] "GET /operations/stock HTTP/1.1" 200 1290
+127.0.0.1 - - [07/Apr/2026:06:55:37 +0000] "GET /operations/stock HTTP/1.1" 200 1290
+127.0.0.1 - - [07/Apr/2026:06:56:05 +0000] "GET /operations/stock HTTP/1.1" 200 1290
+127.0.0.1 - - [07/Apr/2026:07:02:08 +0000] "GET /operations/overview HTTP/1.1" 200 3696
+127.0.0.1 - - [07/Apr/2026:07:02:11 +0000] "GET /operations/receipts HTTP/1.1" 304 -
+127.0.0.1 - - [07/Apr/2026:07:02:13 +0000] "GET /operations/issues HTTP/1.1" 200 2209
+127.0.0.1 - - [07/Apr/2026:07:02:13 +0000] "GET /operations/stock HTTP/1.1" 304 -
+127.0.0.1 - - [07/Apr/2026:07:02:13 +0000] "GET /operations/serial-assets? HTTP/1.1" 304 -
+127.0.0.1 - - [07/Apr/2026:07:03:44 +0000] "GET /operations/stock HTTP/1.1" 304 -
+127.0.0.1 - - [07/Apr/2026:07:03:49 +0000] "GET /operations/issues HTTP/1.1" 304 -
+127.0.0.1 - - [07/Apr/2026:07:03:49 +0000] "GET /operations/serial-assets? HTTP/1.1" 304 -
+127.0.0.1 - - [07/Apr/2026:07:04:16 +0000] "GET /operations/suppliers HTTP/1.1" 304 -
+127.0.0.1 - - [07/Apr/2026:07:09:53 +0000] "GET /operations/issues HTTP/1.1" 304 -
+127.0.0.1 - - [07/Apr/2026:07:09:53 +0000] "GET /operations/stock HTTP/1.1" 304 -
+127.0.0.1 - - [07/Apr/2026:07:09:53 +0000] "GET /operations/serial-assets? HTTP/1.1" 304 -
+127.0.0.1 - - [07/Apr/2026:07:09:55 +0000] "GET /operations/overview HTTP/1.1" 304 -
+127.0.0.1 - - [07/Apr/2026:07:10:09 +0000] "GET /operations/receipts HTTP/1.1" 304 -
+127.0.0.1 - - [07/Apr/2026:07:10:16 +0000] "GET /users HTTP/1.1" 304 -
+127.0.0.1 - - [07/Apr/2026:07:28:46 +0000] "GET /operations/receipts HTTP/1.1" 304 -
+127.0.0.1 - - [07/Apr/2026:07:28:50 +0000] "GET /operations/overview HTTP/1.1" 304 -
+127.0.0.1 - - [07/Apr/2026:07:28:51 +0000] "GET /operations/stock HTTP/1.1" 304 -
+127.0.0.1 - - [07/Apr/2026:07:28:52 +0000] "GET /operations/issues HTTP/1.1" 304 -
+127.0.0.1 - - [07/Apr/2026:07:28:52 +0000] "GET /operations/serial-assets? HTTP/1.1" 304 -
+127.0.0.1 - - [07/Apr/2026:07:28:53 +0000] "GET /operations/suppliers HTTP/1.1" 304 -

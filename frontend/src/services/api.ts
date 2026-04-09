@@ -64,9 +64,54 @@ export interface OperationsOverview {
   pendingIssues: number;
   activeSuppliers: number;
   documentsPendingReview: number;
+  lowStockItems: number;
+  acknowledgedIssues: number;
+  returnedIssues: number;
+  branchIssues: number;
+  activeBranches: number;
+  branchesWithIssuedAssets: number;
   recentReceipts: ReceivingReceipt[];
   issueOutQueue: IssueRecord[];
   supplierHighlights: Supplier[];
+  stockWatchlist: HqStockItem[];
+  documentQueue: DocumentQueueEntry[];
+  recentActivity: AuditActivity[];
+  auditAlerts: AuditAlert[];
+}
+
+export interface DocumentQueueEntry {
+  queueId: string;
+  entityType: "Receipt" | "Issue";
+  referenceId: string;
+  title: string;
+  owner: string;
+  date: string;
+  documentStatus: string;
+  documentCount: number;
+  reason: string;
+}
+
+export interface AuditActivity {
+  activityId: string;
+  activityType:
+    | "Receipt Logged"
+    | "Issue Out"
+    | "Issue Acknowledged"
+    | "Issue Returned";
+  occurredOn: string;
+  actor: string;
+  referenceId: string;
+  detail: string;
+  status: string;
+}
+
+export interface AuditAlert {
+  alertId: string;
+  severity: "info" | "warning" | "critical";
+  title: string;
+  detail: string;
+  referenceType: "receipt" | "issue" | "stock";
+  referenceId: string;
 }
 
 export interface ReceivingReceipt {
@@ -83,6 +128,74 @@ export interface ReceivingReceipt {
   documentCount: number;
   documentStatus: "Complete" | "Pending Review" | "Missing";
   status: "Verified" | "Pending Review" | "Logged";
+  attachmentNames: string[];
+  attachments: ReceiptAttachment[];
+}
+
+export interface ReceiptAttachment {
+  attachmentId: string;
+  receiptId: string;
+  originalName: string;
+  storedName: string;
+  storagePath: string;
+  mimeType: string;
+  fileSize: number;
+  uploadedAt: string;
+  downloadUrl: string;
+}
+
+export interface ReceivingReceiptLine {
+  lineId: string;
+  receiptId: string;
+  lineNumber: number;
+  itemName: string;
+  category: string;
+  quantity: number;
+  unitCost: number;
+  totalCost: number;
+  storageLocation: string;
+  isSerialized: boolean;
+  serialNumbers: string[];
+}
+
+export interface ReceivingReceiptDetail extends ReceivingReceipt {
+  lines: ReceivingReceiptLine[];
+}
+
+export interface ReceivingKnownItem {
+  itemName: string;
+  category: string;
+  defaultStorageLocation: string;
+  supplierName: string;
+  isSerialized: boolean;
+}
+
+export interface ReceivingOptions {
+  suppliers: Supplier[];
+  stockLocations: string[];
+  knownItems: ReceivingKnownItem[];
+  receivedBySuggestions: string[];
+  signedBySuggestions: string[];
+}
+
+export interface NewReceivingReceiptLine {
+  itemName: string;
+  category: string;
+  quantity: number;
+  unitCost: number;
+  storageLocation: string;
+  isSerialized: boolean;
+  serialNumbers?: string[];
+}
+
+export interface NewReceivingReceipt {
+  receiptType: "Batch" | "Single Item";
+  supplierId: string;
+  arrivalDate: string;
+  signedBy: string;
+  receivedBy: string;
+  documentStatus: "Complete" | "Pending Review" | "Missing";
+  lines: NewReceivingReceiptLine[];
 }
 
 export interface HqStockItem {
@@ -98,24 +211,88 @@ export interface HqStockItem {
   status: "Available" | "Reserved" | "Low Stock";
 }
 
+export interface StockMovementRecord {
+  movementId: string;
+  stockId: string;
+  itemName: string;
+  movementType: "Receipt" | "Issue Out" | "Return" | "Adjustment";
+  quantityDelta: number;
+  movementDate: string;
+  referenceType: string;
+  referenceId: string;
+  serialNumbers: string[];
+  notes?: string;
+}
+
+export interface HqStockItemDetail extends HqStockItem {
+  availableSerialCount: number;
+  issuedSerialCount: number;
+  recentMovements: StockMovementRecord[];
+  availableSerialAssets: SerialAsset[];
+}
+
+export interface SerialAsset {
+  assetId: string;
+  stockId: string;
+  itemName: string;
+  serialNumber: string;
+  supplierName: string;
+  lastArrivalDate: string;
+  storageLocation: string;
+  status: "Available" | "Issued";
+  issueId?: string;
+}
+
+export interface IssueAttachment {
+  attachmentId: string;
+  issueId: string;
+  originalName: string;
+  storedName: string;
+  storagePath: string;
+  mimeType: string;
+  fileSize: number;
+  uploadedAt: string;
+  downloadUrl: string;
+}
+
+export interface Branch {
+  branchId: string;
+  name: string;
+  code: string;
+  address: string;
+  region: string;
+  contactPerson: string;
+  phone: string;
+  status: "Active" | "Inactive";
+}
+
 export interface IssueRecord {
   issueId: string;
   itemName: string;
   serialNumber: string;
   destinationType: "Branch" | "Person";
+  branchId?: string;
   issuedTo: string;
   issuedBy: string;
   address: string;
   issueDate: string;
   attachmentNames: string[];
+  attachments: IssueAttachment[];
   notes?: string;
-  status: "Issued";
+  acknowledgedBy?: string;
+  acknowledgedAt?: string;
+  acknowledgementNotes?: string;
+  returnedBy?: string;
+  returnedAt?: string;
+  returnNotes?: string;
+  status: "Issued" | "Acknowledged" | "Returned";
 }
 
 export interface NewIssueRecord {
   itemName: string;
   serialNumber: string;
   destinationType: "Branch" | "Person";
+  branchId?: string;
   issuedTo: string;
   issuedBy: string;
   address: string;
@@ -123,6 +300,20 @@ export interface NewIssueRecord {
   attachmentNames?: string[];
   notes?: string;
 }
+
+export interface AcknowledgeIssuePayload {
+  acknowledgedBy: string;
+  acknowledgedAt?: string;
+  acknowledgementNotes?: string;
+}
+
+export interface ReturnIssuePayload {
+  returnedBy: string;
+  returnedAt?: string;
+  returnNotes?: string;
+}
+
+export type CreateIssueRecordPayload = FormData | NewIssueRecord;
 
 export interface Supplier {
   supplierId: string;
@@ -145,8 +336,11 @@ export const api = createApi({
     "Expenses",
     "OperationsOverview",
     "ReceivingReceipts",
+    "ReceivingOptions",
     "HqStock",
+    "SerialAssets",
     "Transfers",
+    "Branches",
     "Suppliers",
   ],
   endpoints: (build) => ({
@@ -158,21 +352,89 @@ export const api = createApi({
       query: () => "/operations/receipts",
       providesTags: ["ReceivingReceipts"],
     }),
+    getReceivingOptions: build.query<ReceivingOptions, void>({
+      query: () => "/operations/receiving-options",
+      providesTags: ["ReceivingOptions"],
+    }),
+    createReceivingReceipt: build.mutation<
+      ReceivingReceiptDetail,
+      FormData | NewReceivingReceipt
+    >({
+      query: (newReceipt) => ({
+        url: "/operations/receipts",
+        method: "POST",
+        body: newReceipt,
+      }),
+      invalidatesTags: [
+        "ReceivingReceipts",
+        "ReceivingOptions",
+        "HqStock",
+        "OperationsOverview",
+        "SerialAssets",
+      ],
+    }),
     getHqStock: build.query<HqStockItem[], void>({
       query: () => "/operations/stock",
       providesTags: ["HqStock"],
+    }),
+    getHqStockDetail: build.query<HqStockItemDetail, string>({
+      query: (stockId) => `/operations/stock/${stockId}`,
+      providesTags: ["HqStock"],
+    }),
+    getAvailableSerialAssets: build.query<SerialAsset[], string | void>({
+      query: (itemName) => ({
+        url: "/operations/serial-assets",
+        params: itemName ? { itemName } : {},
+      }),
+      providesTags: ["SerialAssets"],
+    }),
+    getBranches: build.query<Branch[], void>({
+      query: () => "/operations/branches",
+      providesTags: ["Branches"],
     }),
     getIssueRecords: build.query<IssueRecord[], void>({
       query: () => "/operations/issues",
       providesTags: ["Transfers"],
     }),
-    createIssueRecord: build.mutation<IssueRecord, NewIssueRecord>({
+    createIssueRecord: build.mutation<IssueRecord, CreateIssueRecordPayload>({
       query: (newIssueRecord) => ({
         url: "/operations/issues",
         method: "POST",
         body: newIssueRecord,
       }),
-      invalidatesTags: ["Transfers", "HqStock", "OperationsOverview"],
+      invalidatesTags: [
+        "Transfers",
+        "HqStock",
+        "OperationsOverview",
+        "SerialAssets",
+      ],
+    }),
+    acknowledgeIssueRecord: build.mutation<
+      IssueRecord,
+      { issueId: string; payload: AcknowledgeIssuePayload }
+    >({
+      query: ({ issueId, payload }) => ({
+        url: `/operations/issues/${issueId}/acknowledge`,
+        method: "POST",
+        body: payload,
+      }),
+      invalidatesTags: ["Transfers", "OperationsOverview"],
+    }),
+    returnIssueRecord: build.mutation<
+      IssueRecord,
+      { issueId: string; payload: ReturnIssuePayload }
+    >({
+      query: ({ issueId, payload }) => ({
+        url: `/operations/issues/${issueId}/return`,
+        method: "POST",
+        body: payload,
+      }),
+      invalidatesTags: [
+        "Transfers",
+        "HqStock",
+        "OperationsOverview",
+        "SerialAssets",
+      ],
     }),
     getSuppliers: build.query<Supplier[], void>({
       query: () => "/operations/suppliers",
@@ -211,9 +473,16 @@ export const api = createApi({
 export const {
   useGetOperationsOverviewQuery,
   useGetReceivingReceiptsQuery,
+  useGetReceivingOptionsQuery,
+  useCreateReceivingReceiptMutation,
   useGetHqStockQuery,
+  useGetHqStockDetailQuery,
+  useGetAvailableSerialAssetsQuery,
+  useGetBranchesQuery,
   useGetIssueRecordsQuery,
   useCreateIssueRecordMutation,
+  useAcknowledgeIssueRecordMutation,
+  useReturnIssueRecordMutation,
   useGetSuppliersQuery,
   useGetDashboardMetricsQuery,
   useGetProductsQuery,

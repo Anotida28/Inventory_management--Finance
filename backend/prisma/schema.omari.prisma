@@ -1,0 +1,273 @@
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "sqlite"
+  url      = env("DATABASE_URL")
+}
+
+// SQLite-backed status fields are modeled as strings for now.
+// Expected values:
+// - User.role: ADMIN, STORES_OFFICER, REVIEWER, VIEWER, BRANCH_RECEIVER
+// - Supplier.status: ACTIVE, INACTIVE
+// - Branch.status: ACTIVE, INACTIVE
+// - Item.status: ACTIVE, INACTIVE, DISCONTINUED
+// - StockLocation.type: HQ_STORAGE
+// - Receipt.receiptType: MANUAL, BATCH
+// - Receipt.status: LOGGED, PENDING_REVIEW, VERIFIED
+// - Receipt.documentStatus: COMPLETE, PENDING_REVIEW, MISSING
+// - SerialAsset.status: AVAILABLE, ISSUED, RESERVED, DAMAGED, RETIRED
+// - IssueOut.destinationType: BRANCH, PERSON
+// - IssueOut.status: ISSUED, RETURNED, CANCELLED
+// - StockMovement.movementType: RECEIPT, ISSUE_OUT, RETURN, ADJUSTMENT
+
+model User {
+  id               String          @id @default(cuid())
+  employeeCode     String?         @unique
+  name             String
+  email            String          @unique
+  role             String          @default("VIEWER")
+  isActive         Boolean         @default(true)
+  createdAt        DateTime        @default(now())
+  updatedAt        DateTime        @updatedAt
+  receiptsReceived Receipt[]       @relation("ReceiptReceivedBy")
+  issuesRaised     IssueOut[]      @relation("IssueRaisedBy")
+  attachments      Attachment[]    @relation("AttachmentUploadedBy")
+  stockMovements   StockMovement[] @relation("StockMovementCreatedBy")
+}
+
+model Supplier {
+  id             String         @id @default(cuid())
+  code           String         @unique
+  name           String
+  contactPerson  String?
+  phone          String?
+  email          String?
+  address        String?
+  notes          String?
+  status         String         @default("ACTIVE")
+  createdAt      DateTime       @default(now())
+  updatedAt      DateTime       @updatedAt
+  receipts       Receipt[]
+  suppliedItems  ItemSupplier[]
+}
+
+model Branch {
+  id             String       @id @default(cuid())
+  code           String       @unique
+  name           String
+  contactPerson  String?
+  phone          String?
+  email          String?
+  address        String
+  status         String       @default("ACTIVE")
+  createdAt      DateTime     @default(now())
+  updatedAt      DateTime     @updatedAt
+  issuesReceived IssueOut[]   @relation("IssueBranchDestination")
+}
+
+model ItemCategory {
+  id          String   @id @default(cuid())
+  name        String   @unique
+  description String?
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+  items       Item[]
+}
+
+model Item {
+  id                 String          @id @default(cuid())
+  sku                String          @unique
+  name               String
+  description        String?
+  unitOfMeasure      String          @default("unit")
+  isSerialized       Boolean         @default(false)
+  reorderLevel       Int             @default(0)
+  status             String          @default("ACTIVE")
+  categoryId         String?
+  createdAt          DateTime        @default(now())
+  updatedAt          DateTime        @updatedAt
+  category           ItemCategory?   @relation(fields: [categoryId], references: [id])
+  preferredSuppliers ItemSupplier[]
+  receiptLines       ReceiptLine[]
+  serialAssets       SerialAsset[]
+  issueOutLines      IssueOutLine[]
+  stockMovements     StockMovement[]
+}
+
+model ItemSupplier {
+  id          String   @id @default(cuid())
+  itemId      String
+  supplierId  String
+  isPreferred Boolean  @default(false)
+  supplierSku String?
+  createdAt   DateTime @default(now())
+  item        Item     @relation(fields: [itemId], references: [id], onDelete: Cascade)
+  supplier    Supplier @relation(fields: [supplierId], references: [id], onDelete: Cascade)
+
+  @@unique([itemId, supplierId])
+}
+
+model StockLocation {
+  id             String          @id @default(cuid())
+  code           String          @unique
+  name           String
+  type           String          @default("HQ_STORAGE")
+  address        String?
+  isActive       Boolean         @default(true)
+  createdAt      DateTime        @default(now())
+  updatedAt      DateTime        @updatedAt
+  receiptLines   ReceiptLine[]
+  serialAssets   SerialAsset[]
+  issueOutLines  IssueOutLine[]  @relation("IssueOutSourceLocation")
+  stockMovements StockMovement[]
+}
+
+model Receipt {
+  id               String               @id @default(cuid())
+  receiptNumber    String               @unique
+  supplierId       String
+  receiptType      String
+  arrivalDate      DateTime
+  signedBy         String
+  receivedByUserId String
+  documentStatus   String               @default("PENDING_REVIEW")
+  status           String               @default("LOGGED")
+  notes            String?
+  createdAt        DateTime             @default(now())
+  updatedAt        DateTime             @updatedAt
+  supplier         Supplier             @relation(fields: [supplierId], references: [id])
+  receivedBy       User                 @relation("ReceiptReceivedBy", fields: [receivedByUserId], references: [id])
+  lines            ReceiptLine[]
+  attachments      Attachment[]         @relation("ReceiptAttachments")
+
+  @@index([supplierId, arrivalDate])
+  @@index([status, documentStatus])
+}
+
+model ReceiptLine {
+  id              String          @id @default(cuid())
+  receiptId       String
+  lineNumber      Int
+  itemId          String
+  stockLocationId String
+  quantity        Int
+  unitCost        Float
+  totalCost       Float
+  notes           String?
+  createdAt       DateTime        @default(now())
+  updatedAt       DateTime        @updatedAt
+  receipt         Receipt         @relation(fields: [receiptId], references: [id], onDelete: Cascade)
+  item            Item            @relation(fields: [itemId], references: [id])
+  stockLocation   StockLocation   @relation(fields: [stockLocationId], references: [id])
+  serialAssets    SerialAsset[]
+  stockMovements  StockMovement[]
+
+  @@unique([receiptId, lineNumber])
+  @@index([itemId, stockLocationId])
+}
+
+model SerialAsset {
+  id                String            @id @default(cuid())
+  itemId            String
+  receiptLineId     String?
+  currentLocationId String
+  serialNumber      String            @unique
+  status            String            @default("AVAILABLE")
+  notes             String?
+  createdAt         DateTime          @default(now())
+  updatedAt         DateTime          @updatedAt
+  item              Item              @relation(fields: [itemId], references: [id])
+  receiptLine       ReceiptLine?      @relation(fields: [receiptLineId], references: [id])
+  currentLocation   StockLocation     @relation(fields: [currentLocationId], references: [id])
+  issueOutLines     IssueOutLine[]
+  stockMovements    StockMovement[]
+
+  @@index([itemId, status])
+  @@index([currentLocationId, status])
+}
+
+model IssueOut {
+  id                  String               @id @default(cuid())
+  issueNumber         String               @unique
+  destinationType     String
+  destinationBranchId String?
+  destinationName     String
+  destinationAddress  String
+  issueDate           DateTime
+  issuedByUserId      String
+  status              String               @default("ISSUED")
+  notes               String?
+  createdAt           DateTime             @default(now())
+  updatedAt           DateTime             @updatedAt
+  destinationBranch   Branch?              @relation("IssueBranchDestination", fields: [destinationBranchId], references: [id])
+  issuedBy            User                 @relation("IssueRaisedBy", fields: [issuedByUserId], references: [id])
+  lines               IssueOutLine[]
+  attachments         Attachment[]         @relation("IssueOutAttachments")
+
+  @@index([issueDate, status])
+}
+
+model IssueOutLine {
+  id               String         @id @default(cuid())
+  issueOutId       String
+  itemId           String
+  sourceLocationId String
+  quantity         Int            @default(1)
+  serialAssetId    String?
+  notes            String?
+  createdAt        DateTime       @default(now())
+  updatedAt        DateTime       @updatedAt
+  issueOut         IssueOut       @relation(fields: [issueOutId], references: [id], onDelete: Cascade)
+  item             Item           @relation(fields: [itemId], references: [id])
+  sourceLocation   StockLocation  @relation("IssueOutSourceLocation", fields: [sourceLocationId], references: [id])
+  serialAsset      SerialAsset?   @relation(fields: [serialAssetId], references: [id])
+  stockMovements   StockMovement[]
+
+  @@index([issueOutId, itemId])
+  @@index([serialAssetId])
+}
+
+model Attachment {
+  id               String    @id @default(cuid())
+  originalName     String
+  storedName       String
+  storagePath      String
+  mimeType         String
+  fileSize         Int
+  receiptId        String?
+  issueOutId       String?
+  uploadedByUserId String?
+  uploadedAt       DateTime  @default(now())
+  receipt          Receipt?  @relation("ReceiptAttachments", fields: [receiptId], references: [id], onDelete: Cascade)
+  issueOut         IssueOut? @relation("IssueOutAttachments", fields: [issueOutId], references: [id], onDelete: Cascade)
+  uploadedBy       User?     @relation("AttachmentUploadedBy", fields: [uploadedByUserId], references: [id])
+
+  @@index([receiptId])
+  @@index([issueOutId])
+}
+
+model StockMovement {
+  id              String            @id @default(cuid())
+  movementType    String
+  itemId          String
+  stockLocationId String
+  serialAssetId   String?
+  receiptLineId   String?
+  issueOutLineId  String?
+  quantityDelta   Int
+  movementDate    DateTime
+  createdByUserId String?
+  notes           String?
+  createdAt       DateTime          @default(now())
+  item            Item              @relation(fields: [itemId], references: [id])
+  stockLocation   StockLocation     @relation(fields: [stockLocationId], references: [id])
+  serialAsset     SerialAsset?      @relation(fields: [serialAssetId], references: [id])
+  receiptLine     ReceiptLine?      @relation(fields: [receiptLineId], references: [id])
+  issueOutLine    IssueOutLine?     @relation(fields: [issueOutLineId], references: [id])
+  createdBy       User?             @relation("StockMovementCreatedBy", fields: [createdByUserId], references: [id])
+
+  @@index([itemId, stockLocationId, movementDate])
+  @@index([serialAssetId])
+}
