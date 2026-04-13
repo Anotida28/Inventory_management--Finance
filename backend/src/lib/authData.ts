@@ -1,21 +1,6 @@
-import fs from "fs";
-import path from "path";
 import bcrypt from "bcryptjs";
 import jwt from "jsonwebtoken";
-
-const { DatabaseSync } = require("node:sqlite") as {
-  DatabaseSync: new (path: string) => any;
-};
-
-const configuredDatabasePath =
-  process.env.OPERATIONS_DB_PATH || "./data/operations.sqlite";
-const resolvedDatabasePath = path.isAbsolute(configuredDatabasePath)
-  ? configuredDatabasePath
-  : path.join(process.cwd(), configuredDatabasePath);
-
-fs.mkdirSync(path.dirname(resolvedDatabasePath), { recursive: true });
-
-const db = new DatabaseSync(resolvedDatabasePath);
+import { db, ensureIndex } from "./database";
 
 const AUTH_TOKEN_TTL_SECONDS = 60 * 60 * 8;
 const AUTH_TOKEN_TTL = `${AUTH_TOKEN_TTL_SECONDS}s`;
@@ -97,24 +82,21 @@ const getJwtSecret = () => process.env.JWT_SECRET || "dev-secret";
 const ensureAuthSchema = () => {
   db.exec(`
     CREATE TABLE IF NOT EXISTS auth_users (
-      userId TEXT PRIMARY KEY,
-      username TEXT NOT NULL UNIQUE,
-      name TEXT NOT NULL,
-      email TEXT NOT NULL UNIQUE,
-      passwordHash TEXT NOT NULL,
-      role TEXT NOT NULL,
-      status TEXT NOT NULL DEFAULT 'Active',
-      createdAt TEXT NOT NULL,
-      updatedAt TEXT NOT NULL,
-      lastLogin TEXT
-    );
-
-    CREATE INDEX IF NOT EXISTS idx_auth_users_username
-    ON auth_users (username);
-
-    CREATE INDEX IF NOT EXISTS idx_auth_users_email
-    ON auth_users (email);
+      userId VARCHAR(64) PRIMARY KEY,
+      username VARCHAR(64) NOT NULL UNIQUE,
+      name VARCHAR(255) NOT NULL,
+      email VARCHAR(255) NOT NULL UNIQUE,
+      passwordHash VARCHAR(255) NOT NULL,
+      role VARCHAR(32) NOT NULL,
+      status VARCHAR(32) NOT NULL DEFAULT 'Active',
+      createdAt VARCHAR(32) NOT NULL,
+      updatedAt VARCHAR(32) NOT NULL,
+      lastLogin VARCHAR(32) NULL
+    ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci
   `);
+
+  ensureIndex("auth_users", "idx_auth_users_username", ["username"]);
+  ensureIndex("auth_users", "idx_auth_users_email", ["email"]);
 };
 
 ensureAuthSchema();
@@ -132,12 +114,7 @@ const mapAuthUser = (row: Omit<AuthUserRow, "passwordHash">): AuthUser => ({
 });
 
 const getNextUserId = () => {
-  const highestSequence =
-    db
-      .prepare(
-        "SELECT MAX(CAST(SUBSTR(userId, 5) AS INTEGER)) AS sequence FROM auth_users"
-      )
-      .get().sequence || 0;
+  const highestSequence = db.getNumericSuffixSequence("auth_users", "userId", 5);
 
   return `USR-${String(highestSequence + 1).padStart(3, "0")}`;
 };

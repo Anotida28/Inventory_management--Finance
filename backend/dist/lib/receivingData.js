@@ -1,13 +1,8 @@
 "use strict";
-var __importDefault = (this && this.__importDefault) || function (mod) {
-    return (mod && mod.__esModule) ? mod : { "default": mod };
-};
 Object.defineProperty(exports, "__esModule", { value: true });
 exports.verifyReceivingReceiptData = exports.appendReceivingReceiptAttachmentsData = exports.createReceivingReceiptData = exports.getOperationAttachmentByIdData = exports.getReceivingReceiptByIdData = exports.getReceivingReceiptsWithAttachmentsData = exports.getReceivingOptionsData = void 0;
-const fs_1 = __importDefault(require("fs"));
-const path_1 = __importDefault(require("path"));
+const database_1 = require("./database");
 const stockLocationBalances_1 = require("./stockLocationBalances");
-const { DatabaseSync } = require("node:sqlite");
 const stockLocationSeeds = [
     { locationId: "LOC-001", locationName: "HQ Cage A1" },
     { locationId: "LOC-002", locationName: "HQ Cage A2" },
@@ -17,16 +12,8 @@ const stockLocationSeeds = [
     { locationId: "LOC-006", locationName: "HQ Rack D1" },
     { locationId: "LOC-007", locationName: "HQ Rack E2" },
 ];
-const configuredDatabasePath = process.env.OPERATIONS_DB_PATH || "./data/operations.sqlite";
-const resolvedDatabasePath = path_1.default.isAbsolute(configuredDatabasePath)
-    ? configuredDatabasePath
-    : path_1.default.join(process.cwd(), configuredDatabasePath);
-fs_1.default.mkdirSync(path_1.default.dirname(resolvedDatabasePath), { recursive: true });
-const db = new DatabaseSync(resolvedDatabasePath);
 const getTableColumns = (tableName) => {
-    return db
-        .prepare(`PRAGMA table_info(${tableName})`)
-        .all().map((column) => column.name);
+    return database_1.db.getTableColumns(tableName);
 };
 const parseJsonArray = (value) => {
     if (!value)
@@ -60,73 +47,76 @@ const normalizeBoolean = (value) => {
 const getPublicApiBaseUrl = () => process.env.PUBLIC_API_BASE_URL ||
     `http://localhost:${process.env.PORT || 3001}`;
 const ensureExtendedReceivingSchema = () => {
-    db.exec(`
+    database_1.db.exec(`
     CREATE TABLE IF NOT EXISTS stock_locations (
-      locationId TEXT PRIMARY KEY,
-      locationName TEXT NOT NULL UNIQUE
-    );
+      locationId VARCHAR(64) PRIMARY KEY,
+      locationName VARCHAR(255) NOT NULL UNIQUE
+    ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
 
     CREATE TABLE IF NOT EXISTS receiving_receipt_lines (
-      lineId TEXT PRIMARY KEY,
-      receiptId TEXT NOT NULL,
-      lineNumber INTEGER NOT NULL,
-      itemName TEXT NOT NULL,
-      category TEXT NOT NULL,
-      quantity INTEGER NOT NULL,
-      unitCost REAL NOT NULL,
-      totalCost REAL NOT NULL,
-      storageLocation TEXT NOT NULL,
-      isSerialized INTEGER NOT NULL DEFAULT 0,
-      serialNumbers TEXT NOT NULL DEFAULT '[]'
-    );
+      lineId VARCHAR(96) PRIMARY KEY,
+      receiptId VARCHAR(64) NOT NULL,
+      lineNumber INT NOT NULL,
+      itemName VARCHAR(255) NOT NULL,
+      category VARCHAR(128) NOT NULL,
+      quantity INT NOT NULL,
+      unitCost DOUBLE NOT NULL,
+      totalCost DOUBLE NOT NULL,
+      storageLocation VARCHAR(255) NOT NULL,
+      isSerialized TINYINT(1) NOT NULL DEFAULT 0,
+      serialNumbers LONGTEXT NOT NULL
+    ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
 
     CREATE TABLE IF NOT EXISTS stock_movements (
-      movementId TEXT PRIMARY KEY,
-      movementType TEXT NOT NULL,
-      stockId TEXT NOT NULL,
-      itemName TEXT NOT NULL,
-      quantityDelta INTEGER NOT NULL,
-      movementDate TEXT NOT NULL,
-      referenceType TEXT NOT NULL,
-      referenceId TEXT NOT NULL,
-      storageLocation TEXT,
-      serialNumbers TEXT,
-      notes TEXT
-    );
+      movementId VARCHAR(96) PRIMARY KEY,
+      movementType VARCHAR(64) NOT NULL,
+      stockId VARCHAR(64) NOT NULL,
+      itemName VARCHAR(255) NOT NULL,
+      quantityDelta INT NOT NULL,
+      movementDate VARCHAR(32) NOT NULL,
+      referenceType VARCHAR(64) NOT NULL,
+      referenceId VARCHAR(64) NOT NULL,
+      storageLocation VARCHAR(255) NULL,
+      serialNumbers LONGTEXT NULL,
+      notes TEXT NULL
+    ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
 
     CREATE TABLE IF NOT EXISTS attachments (
-      attachmentId TEXT PRIMARY KEY,
-      entityType TEXT NOT NULL,
-      entityId TEXT NOT NULL,
-      originalName TEXT NOT NULL,
-      storedName TEXT NOT NULL,
-      storagePath TEXT NOT NULL,
-      mimeType TEXT NOT NULL,
-      fileSize INTEGER NOT NULL,
-      uploadedAt TEXT NOT NULL
-    );
-
-    CREATE INDEX IF NOT EXISTS idx_receiving_receipt_lines_receipt
-    ON receiving_receipt_lines (receiptId, lineNumber);
-
-    CREATE INDEX IF NOT EXISTS idx_attachments_entity
-    ON attachments (entityType, entityId);
-
-    CREATE INDEX IF NOT EXISTS idx_stock_movements_reference
-    ON stock_movements (referenceType, referenceId);
+      attachmentId VARCHAR(96) PRIMARY KEY,
+      entityType VARCHAR(64) NOT NULL,
+      entityId VARCHAR(64) NOT NULL,
+      originalName VARCHAR(255) NOT NULL,
+      storedName VARCHAR(255) NOT NULL,
+      storagePath VARCHAR(512) NOT NULL,
+      mimeType VARCHAR(128) NOT NULL,
+      fileSize INT NOT NULL,
+      uploadedAt VARCHAR(32) NOT NULL
+    ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci
   `);
-    (0, stockLocationBalances_1.ensureStockLocationBalanceSchema)(db);
+    (0, database_1.ensureIndex)("receiving_receipt_lines", "idx_receiving_receipt_lines_receipt", [
+        "receiptId",
+        "lineNumber",
+    ]);
+    (0, database_1.ensureIndex)("attachments", "idx_attachments_entity", [
+        "entityType",
+        "entityId",
+    ]);
+    (0, database_1.ensureIndex)("stock_movements", "idx_stock_movements_reference", [
+        "referenceType",
+        "referenceId",
+    ]);
+    (0, stockLocationBalances_1.ensureStockLocationBalanceSchema)(database_1.db);
     const stockMovementColumns = getTableColumns("stock_movements");
     if (stockMovementColumns.length > 0 &&
         !stockMovementColumns.includes("storageLocation")) {
-        db.exec(`
+        database_1.db.exec(`
       ALTER TABLE stock_movements
-      ADD COLUMN storageLocation TEXT
+      ADD COLUMN storageLocation VARCHAR(255)
     `);
     }
-    const stockLocationCount = db.prepare("SELECT COUNT(*) AS count FROM stock_locations").get().count || 0;
+    const stockLocationCount = database_1.db.prepare("SELECT COUNT(*) AS count FROM stock_locations").get().count || 0;
     if (stockLocationCount === 0) {
-        const insertLocation = db.prepare(`
+        const insertLocation = database_1.db.prepare(`
       INSERT INTO stock_locations (locationId, locationName)
       VALUES (?, ?)
     `);
@@ -178,7 +168,7 @@ const getReceiptAttachmentsByReceiptIds = (receiptIds) => {
         return attachmentsByReceiptId;
     }
     const placeholders = receiptIds.map(() => "?").join(", ");
-    const rows = db
+    const rows = database_1.db
         .prepare(`
         SELECT
           attachmentId,
@@ -204,7 +194,7 @@ const getReceiptAttachmentsByReceiptIds = (receiptIds) => {
     return attachmentsByReceiptId;
 };
 const getReceiptLinesByReceiptId = (receiptId) => {
-    const rows = db
+    const rows = database_1.db
         .prepare(`
         SELECT
           lineId,
@@ -247,7 +237,7 @@ const deriveReceiptDocumentState = (documentStatus, attachmentCount) => {
     };
 };
 const updateReceiptDocumentState = (receiptId, documentState) => {
-    db.prepare(`
+    database_1.db.prepare(`
       UPDATE receiving_receipts
       SET
         documentCount = ?,
@@ -260,7 +250,7 @@ const syncReceivingReceiptDocumentStates = () => {
     if (getTableColumns("receiving_receipts").length === 0) {
         return;
     }
-    const rows = db
+    const rows = database_1.db
         .prepare(`
         SELECT
           receipts.receiptId,
@@ -290,31 +280,25 @@ const syncReceivingReceiptDocumentStates = () => {
 };
 syncReceivingReceiptDocumentStates();
 const ensureStockLocationExists = (storageLocation) => {
-    const existingLocation = db
+    const existingLocation = database_1.db
         .prepare("SELECT locationId FROM stock_locations WHERE locationName = ?")
         .get(storageLocation);
     if (existingLocation) {
         return;
     }
-    const highestSequence = db
-        .prepare("SELECT MAX(CAST(SUBSTR(locationId, 5) AS INTEGER)) AS sequence FROM stock_locations")
-        .get().sequence || 0;
+    const highestSequence = database_1.db.getNumericSuffixSequence("stock_locations", "locationId", 5);
     const locationId = `LOC-${String(highestSequence + 1).padStart(3, "0")}`;
-    db.prepare(`
+    database_1.db.prepare(`
       INSERT INTO stock_locations (locationId, locationName)
       VALUES (?, ?)
     `).run(locationId, storageLocation);
 };
 const getNextReceiptId = () => {
-    const highestSequence = db
-        .prepare("SELECT MAX(CAST(SUBSTR(receiptId, 10) AS INTEGER)) AS sequence FROM receiving_receipts")
-        .get().sequence || 0;
+    const highestSequence = database_1.db.getNumericSuffixSequence("receiving_receipts", "receiptId", 10);
     return `RCV-${new Date().getFullYear()}-${String(highestSequence + 1).padStart(3, "0")}`;
 };
 const getNextStockId = () => {
-    const highestSequence = db
-        .prepare("SELECT MAX(CAST(SUBSTR(stockId, 5) AS INTEGER)) AS sequence FROM hq_stock_items")
-        .get().sequence || 0;
+    const highestSequence = database_1.db.getNumericSuffixSequence("hq_stock_items", "stockId", 5);
     return `STK-${String(highestSequence + 1).padStart(3, "0")}`;
 };
 const parseSerialNumbers = (value) => {
@@ -330,7 +314,7 @@ const parseSerialNumbers = (value) => {
     return [];
 };
 const isSerializedItemInStock = (itemName) => {
-    const serialCount = db
+    const serialCount = database_1.db
         .prepare(`
           SELECT COUNT(*) AS count
           FROM hq_serial_assets
@@ -340,7 +324,7 @@ const isSerializedItemInStock = (itemName) => {
     return serialCount > 0;
 };
 const getAvailableSerialCountByStockId = (stockId) => {
-    return (db
+    return (database_1.db
         .prepare(`
           SELECT COUNT(*) AS count
           FROM hq_serial_assets
@@ -349,7 +333,7 @@ const getAvailableSerialCountByStockId = (stockId) => {
         .get(stockId).count || 0);
 };
 const getReceivingOptionsData = () => {
-    const suppliers = db
+    const suppliers = database_1.db
         .prepare(`
         SELECT
           supplierId,
@@ -364,14 +348,14 @@ const getReceivingOptionsData = () => {
         ORDER BY name ASC
       `)
         .all();
-    const stockLocations = db
+    const stockLocations = database_1.db
         .prepare(`
           SELECT locationName
           FROM stock_locations
           ORDER BY locationName ASC
         `)
         .all().map((location) => location.locationName);
-    const knownItems = db
+    const knownItems = database_1.db
         .prepare(`
           SELECT
             stockId,
@@ -383,7 +367,7 @@ const getReceivingOptionsData = () => {
           ORDER BY itemName ASC
         `)
         .all();
-    const stockLocationBalancesByStockId = (0, stockLocationBalances_1.getStockLocationBalancesByStockIds)(db, knownItems.map((item) => item.stockId));
+    const stockLocationBalancesByStockId = (0, stockLocationBalances_1.getStockLocationBalancesByStockIds)(database_1.db, knownItems.map((item) => item.stockId));
     const resolvedKnownItems = knownItems.map((item) => {
         var _a, _b;
         const locationBalances = (_a = stockLocationBalancesByStockId.get(item.stockId)) !== null && _a !== void 0 ? _a : [];
@@ -395,14 +379,14 @@ const getReceivingOptionsData = () => {
             isSerialized: isSerializedItemInStock(item.itemName),
         };
     });
-    const receivedBySuggestions = db
+    const receivedBySuggestions = database_1.db
         .prepare(`
           SELECT DISTINCT receivedBy
           FROM receiving_receipts
           ORDER BY receivedBy ASC
         `)
         .all().map((row) => row.receivedBy);
-    const signedBySuggestions = db
+    const signedBySuggestions = database_1.db
         .prepare(`
           SELECT DISTINCT signedBy
           FROM receiving_receipts
@@ -420,7 +404,7 @@ const getReceivingOptionsData = () => {
 exports.getReceivingOptionsData = getReceivingOptionsData;
 const getReceivingReceiptsWithAttachmentsData = () => {
     syncReceivingReceiptDocumentStates();
-    const rows = db
+    const rows = database_1.db
         .prepare(`
         SELECT
           receiptId,
@@ -468,7 +452,7 @@ exports.getReceivingReceiptsWithAttachmentsData = getReceivingReceiptsWithAttach
 const getReceivingReceiptByIdData = (receiptId) => {
     var _a;
     syncReceivingReceiptDocumentStates();
-    const row = db
+    const row = database_1.db
         .prepare(`
         SELECT
           receiptId,
@@ -514,7 +498,7 @@ const getReceivingReceiptByIdData = (receiptId) => {
 };
 exports.getReceivingReceiptByIdData = getReceivingReceiptByIdData;
 const getOperationAttachmentByIdData = (attachmentId) => {
-    const row = db
+    const row = database_1.db
         .prepare(`
         SELECT
           attachmentId,
@@ -561,7 +545,7 @@ const createReceivingReceiptData = (newReceipt, uploadedAttachments = []) => {
     if (receiptType === "Single Item" && lines.length !== 1) {
         throw new Error("Single item receipts can only contain one line");
     }
-    const supplier = db
+    const supplier = database_1.db
         .prepare(`
         SELECT
           supplierId,
@@ -597,7 +581,7 @@ const createReceivingReceiptData = (newReceipt, uploadedAttachments = []) => {
             unitCost < 0) {
             throw new Error(`Receipt line ${index + 1} is missing required fields`);
         }
-        const existingStockItem = db
+        const existingStockItem = database_1.db
             .prepare(`
           SELECT
             stockId,
@@ -679,7 +663,7 @@ const createReceivingReceiptData = (newReceipt, uploadedAttachments = []) => {
                 throw new Error("Duplicate serial numbers were supplied in this receipt");
             }
             seenSerialNumbers.add(serialNumber);
-            const existingSerial = db
+            const existingSerial = database_1.db
                 .prepare(`
             SELECT assetId
             FROM hq_serial_assets
@@ -714,9 +698,9 @@ const createReceivingReceiptData = (newReceipt, uploadedAttachments = []) => {
         attachments: [],
         lines: [],
     };
-    db.exec("BEGIN");
+    database_1.db.exec("BEGIN");
     try {
-        db.prepare(`
+        database_1.db.prepare(`
         INSERT INTO receiving_receipts (
           receiptId,
           receiptType,
@@ -733,12 +717,12 @@ const createReceivingReceiptData = (newReceipt, uploadedAttachments = []) => {
           status
         ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
       `).run(createdReceipt.receiptId, createdReceipt.receiptType, createdReceipt.supplierId, createdReceipt.supplierName, createdReceipt.arrivalDate, createdReceipt.signedBy, createdReceipt.receivedBy, createdReceipt.itemCount, createdReceipt.totalQuantity, createdReceipt.totalAmount, createdReceipt.documentCount, createdReceipt.documentStatus, createdReceipt.status);
-        db.prepare(`
+        database_1.db.prepare(`
         UPDATE suppliers
         SET lastDeliveryDate = ?
         WHERE supplierId = ?
       `).run(arrivalDate, supplierId);
-        const insertReceiptLine = db.prepare(`
+        const insertReceiptLine = database_1.db.prepare(`
         INSERT INTO receiving_receipt_lines (
           lineId,
           receiptId,
@@ -753,7 +737,7 @@ const createReceivingReceiptData = (newReceipt, uploadedAttachments = []) => {
           serialNumbers
         ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
       `);
-        const insertAttachment = db.prepare(`
+        const insertAttachment = database_1.db.prepare(`
         INSERT INTO attachments (
           attachmentId,
           entityType,
@@ -766,7 +750,7 @@ const createReceivingReceiptData = (newReceipt, uploadedAttachments = []) => {
           uploadedAt
         ) VALUES (?, 'receiving_receipt', ?, ?, ?, ?, ?, ?, ?)
       `);
-        const insertStockMovement = db.prepare(`
+        const insertStockMovement = database_1.db.prepare(`
         INSERT INTO stock_movements (
           movementId,
           movementType,
@@ -781,7 +765,7 @@ const createReceivingReceiptData = (newReceipt, uploadedAttachments = []) => {
           notes
         ) VALUES (?, 'Receipt', ?, ?, ?, ?, 'receiving_receipt', ?, ?, ?, ?)
       `);
-        const insertStockItem = db.prepare(`
+        const insertStockItem = database_1.db.prepare(`
         INSERT INTO hq_stock_items (
           stockId,
           itemName,
@@ -795,7 +779,7 @@ const createReceivingReceiptData = (newReceipt, uploadedAttachments = []) => {
           status
         ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
       `);
-        const insertSerialAsset = db.prepare(`
+        const insertSerialAsset = database_1.db.prepare(`
         INSERT INTO hq_serial_assets (
           assetId,
           stockId,
@@ -808,7 +792,7 @@ const createReceivingReceiptData = (newReceipt, uploadedAttachments = []) => {
           issueId
         ) VALUES (?, ?, ?, ?, ?, ?, ?, 'Available', ?)
       `);
-        const updateStockItem = db.prepare(`
+        const updateStockItem = database_1.db.prepare(`
         UPDATE hq_stock_items
         SET
           category = ?,
@@ -820,7 +804,7 @@ const createReceivingReceiptData = (newReceipt, uploadedAttachments = []) => {
           status = ?
         WHERE stockId = ?
       `);
-        const countSerialAssetsByStockId = db.prepare(`
+        const countSerialAssetsByStockId = database_1.db.prepare(`
         SELECT COUNT(*) AS count
         FROM hq_serial_assets
         WHERE stockId = ?
@@ -860,7 +844,7 @@ const createReceivingReceiptData = (newReceipt, uploadedAttachments = []) => {
                 stockContext.nextSerialSequence += line.serialNumbers.length;
                 stockContext.availableSerialCount += line.quantity;
             }
-            (0, stockLocationBalances_1.adjustStockLocationBalance)(db, {
+            (0, stockLocationBalances_1.adjustStockLocationBalance)(database_1.db, {
                 stockId: stockContext.stockId,
                 storageLocation: line.storageLocation,
                 quantityDelta: line.quantity,
@@ -903,17 +887,17 @@ const createReceivingReceiptData = (newReceipt, uploadedAttachments = []) => {
                 downloadUrl: `${getPublicApiBaseUrl()}/api/operations/attachments/${attachmentId}/download`,
             });
         });
-        db.exec("COMMIT");
+        database_1.db.exec("COMMIT");
     }
     catch (error) {
-        db.exec("ROLLBACK");
+        database_1.db.exec("ROLLBACK");
         throw error;
     }
     return createdReceipt;
 };
 exports.createReceivingReceiptData = createReceivingReceiptData;
 const getNextReceiptAttachmentSequence = (receiptId) => {
-    const rows = db
+    const rows = database_1.db
         .prepare(`
         SELECT attachmentId
         FROM attachments
@@ -937,7 +921,7 @@ const appendReceivingReceiptAttachmentsData = (receiptId, uploadedAttachments = 
         throw new Error("At least one attachment is required");
     }
     const nextAttachmentSequence = getNextReceiptAttachmentSequence(receiptId);
-    const insertAttachment = db.prepare(`
+    const insertAttachment = database_1.db.prepare(`
       INSERT INTO attachments (
         attachmentId,
         entityType,
@@ -950,17 +934,17 @@ const appendReceivingReceiptAttachmentsData = (receiptId, uploadedAttachments = 
         uploadedAt
       ) VALUES (?, 'receiving_receipt', ?, ?, ?, ?, ?, ?, ?)
     `);
-    db.exec("BEGIN");
+    database_1.db.exec("BEGIN");
     try {
         uploadedAttachments.forEach((attachment, index) => {
             const attachmentId = `${receiptId}-ATT-${String(nextAttachmentSequence + index + 1).padStart(3, "0")}`;
             insertAttachment.run(attachmentId, receiptId, attachment.originalName, attachment.storedName, attachment.storagePath, attachment.mimeType, attachment.fileSize, new Date().toISOString());
         });
         updateReceiptDocumentState(receiptId, deriveReceiptDocumentState("Pending Review", existingReceipt.attachments.length + uploadedAttachments.length));
-        db.exec("COMMIT");
+        database_1.db.exec("COMMIT");
     }
     catch (error) {
-        db.exec("ROLLBACK");
+        database_1.db.exec("ROLLBACK");
         throw error;
     }
     return (0, exports.getReceivingReceiptByIdData)(receiptId);

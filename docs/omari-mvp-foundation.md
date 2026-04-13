@@ -64,7 +64,7 @@ These can stay in the repo temporarily, but they should not drive the Omari road
 The current application mixes:
 
 - file-backed tutorial data
-- local SQLite operations data
+- operational inventory data
 - an older Prisma schema that models a retail dashboard instead of Omari operations
 
 For the Omari build, the long-term source of truth should be a single Prisma schema that represents the operational domain clearly. To avoid breaking the current prototype during Step 1, the target schema is defined in:

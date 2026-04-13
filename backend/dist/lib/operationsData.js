@@ -1,14 +1,9 @@
 "use strict";
-var __importDefault = (this && this.__importDefault) || function (mod) {
-    return (mod && mod.__esModule) ? mod : { "default": mod };
-};
 Object.defineProperty(exports, "__esModule", { value: true });
 exports.getOperationsOverviewData = exports.returnIssueRecordData = exports.acknowledgeIssueRecordData = exports.createIssueRecordData = exports.getAvailableSerialAssetsData = exports.getIssueAttachmentByIdData = exports.getIssueRecordByIdData = exports.getIssueRecordsData = exports.getHqStockDetailData = exports.getHqStockData = exports.getBranchesData = exports.getSuppliersData = exports.getReceivingReceiptsData = void 0;
-const fs_1 = __importDefault(require("fs"));
-const path_1 = __importDefault(require("path"));
 const date_1 = require("./date");
+const database_1 = require("./database");
 const stockLocationBalances_1 = require("./stockLocationBalances");
-const { DatabaseSync } = require("node:sqlite");
 const supplierSeeds = [
     {
         supplierId: "SUP-001",
@@ -103,12 +98,6 @@ const branchSeeds = [
         status: "Active",
     },
 ];
-const configuredDatabasePath = process.env.OPERATIONS_DB_PATH || "./data/operations.sqlite";
-const resolvedDatabasePath = path_1.default.isAbsolute(configuredDatabasePath)
-    ? configuredDatabasePath
-    : path_1.default.join(process.cwd(), configuredDatabasePath);
-fs_1.default.mkdirSync(path_1.default.dirname(resolvedDatabasePath), { recursive: true });
-const db = new DatabaseSync(resolvedDatabasePath);
 const parseAttachmentNames = (value) => {
     if (!value)
         return [];
@@ -208,9 +197,7 @@ const getHqStockStatus = (currentStatus, nextTotalQuantity) => {
     return nextTotalQuantity <= 5 ? "Low Stock" : "Available";
 };
 const getTableColumns = (tableName) => {
-    return db
-        .prepare(`PRAGMA table_info(${tableName})`)
-        .all().map((column) => column.name);
+    return database_1.db.getTableColumns(tableName);
 };
 const migrateIssueRecordsTableIfNeeded = () => {
     const issueRecordColumns = getTableColumns("issue_records");
@@ -223,84 +210,42 @@ const migrateIssueRecordsTableIfNeeded = () => {
     if (issueRecordColumns.length === 0) {
         return;
     }
-    db.exec("BEGIN");
-    try {
-        db.exec(`
-      ALTER TABLE issue_records RENAME TO issue_records_legacy;
-
-      CREATE TABLE issue_records (
-        issueId TEXT PRIMARY KEY,
-        itemName TEXT NOT NULL,
-        serialNumber TEXT NOT NULL,
-        destinationType TEXT NOT NULL,
-        branchId TEXT,
-        issuedTo TEXT NOT NULL,
-        issuedBy TEXT NOT NULL,
-        address TEXT NOT NULL,
-        issueDate TEXT NOT NULL,
-        attachmentNames TEXT NOT NULL DEFAULT '[]',
-        notes TEXT,
-        acknowledgedBy TEXT,
-        acknowledgedAt TEXT,
-        acknowledgementNotes TEXT,
-        returnedBy TEXT,
-        returnedAt TEXT,
-        returnNotes TEXT,
-        status TEXT NOT NULL
-      );
-
-      INSERT INTO issue_records (
-        issueId,
-        itemName,
-        serialNumber,
-        destinationType,
-        branchId,
-        issuedTo,
-        issuedBy,
-        address,
-        issueDate,
-        attachmentNames,
-        notes,
-        acknowledgedBy,
-        acknowledgedAt,
-        acknowledgementNotes,
-        returnedBy,
-        returnedAt,
-        returnNotes,
-        status
-      )
-      SELECT
-        issueId,
-        itemName,
-        serialNumber,
-        destinationType,
-        NULL,
-        issuedTo,
-        issuedBy,
-        address,
-        issueDate,
-        attachmentNames,
-        notes,
-        NULL,
-        NULL,
-        NULL,
-        NULL,
-        NULL,
-        NULL,
-        status
-      FROM issue_records_legacy;
-
-      DROP TABLE issue_records_legacy;
-    `);
-        db.exec("COMMIT");
-    }
-    catch (error) {
-        db.exec("ROLLBACK");
-        throw error;
-    }
+    const missingColumns = [
+        {
+            name: "branchId",
+            definition: "VARCHAR(64) NULL AFTER destinationType",
+        },
+        {
+            name: "acknowledgedBy",
+            definition: "VARCHAR(255) NULL AFTER notes",
+        },
+        {
+            name: "acknowledgedAt",
+            definition: "VARCHAR(32) NULL AFTER acknowledgedBy",
+        },
+        {
+            name: "acknowledgementNotes",
+            definition: "TEXT NULL AFTER acknowledgedAt",
+        },
+        {
+            name: "returnedBy",
+            definition: "VARCHAR(255) NULL AFTER acknowledgementNotes",
+        },
+        {
+            name: "returnedAt",
+            definition: "VARCHAR(32) NULL AFTER returnedBy",
+        },
+        {
+            name: "returnNotes",
+            definition: "TEXT NULL AFTER returnedAt",
+        },
+    ].filter((column) => !issueRecordColumns.includes(column.name));
+    missingColumns.forEach((column) => {
+        database_1.db.exec(`ALTER TABLE issue_records ADD COLUMN ${column.name} ${column.definition}`);
+    });
 };
 const backfillIssueRecordBranchIds = () => {
-    const branches = db
+    const branches = database_1.db
         .prepare(`
         SELECT
           branchId,
@@ -313,7 +258,7 @@ const backfillIssueRecordBranchIds = () => {
     if (branches.length === 0) {
         return;
     }
-    const assignBranchId = db.prepare(`
+    const assignBranchId = database_1.db.prepare(`
     UPDATE issue_records
     SET branchId = ?, address = ?
     WHERE destinationType = 'Branch'
@@ -325,14 +270,14 @@ const backfillIssueRecordBranchIds = () => {
     });
 };
 const backfillStockLocationBalancesIfNeeded = () => {
-    const balanceCount = db
+    const balanceCount = database_1.db
         .prepare("SELECT COUNT(*) AS count FROM hq_stock_location_balances")
         .get().count || 0;
-    const stockCount = db.prepare("SELECT COUNT(*) AS count FROM hq_stock_items").get().count || 0;
+    const stockCount = database_1.db.prepare("SELECT COUNT(*) AS count FROM hq_stock_items").get().count || 0;
     if (balanceCount > 0 || stockCount === 0) {
         return;
     }
-    const stockItems = db
+    const stockItems = database_1.db
         .prepare(`
         SELECT
           stockId,
@@ -341,7 +286,7 @@ const backfillStockLocationBalancesIfNeeded = () => {
         FROM hq_stock_items
       `)
         .all();
-    const serializedByLocation = db
+    const serializedByLocation = database_1.db
         .prepare(`
           SELECT
             stockId,
@@ -363,7 +308,7 @@ const backfillStockLocationBalancesIfNeeded = () => {
     const receiptLineColumns = getTableColumns("receiving_receipt_lines");
     const nonSerializedByStockId = new Map();
     if (receiptLineColumns.length > 0) {
-        const nonSerializedReceiptRows = db
+        const nonSerializedReceiptRows = database_1.db
             .prepare(`
           SELECT
             stock.stockId,
@@ -386,7 +331,7 @@ const backfillStockLocationBalancesIfNeeded = () => {
             nonSerializedByStockId.set(row.stockId, stockLocations);
         });
     }
-    db.exec("BEGIN");
+    database_1.db.exec("BEGIN");
     try {
         stockItems.forEach((stockItem) => {
             var _a, _b, _c, _d, _e, _f;
@@ -444,7 +389,7 @@ const backfillStockLocationBalancesIfNeeded = () => {
             Array.from(locationEntries.values())
                 .filter((entry) => entry.serializedUnits > 0 || entry.nonSerializedUnits > 0)
                 .forEach((entry) => {
-                (0, stockLocationBalances_1.adjustStockLocationBalance)(db, {
+                (0, stockLocationBalances_1.adjustStockLocationBalance)(database_1.db, {
                     stockId: stockItem.stockId,
                     storageLocation: entry.storageLocation,
                     quantityDelta: entry.serializedUnits + entry.nonSerializedUnits,
@@ -454,160 +399,163 @@ const backfillStockLocationBalancesIfNeeded = () => {
                 });
             });
         });
-        db.exec("COMMIT");
+        database_1.db.exec("COMMIT");
     }
     catch (error) {
-        db.exec("ROLLBACK");
+        database_1.db.exec("ROLLBACK");
         throw error;
     }
 };
 const initializeDatabase = () => {
-    db.exec(`
-    PRAGMA journal_mode = WAL;
-
+    database_1.db.exec(`
     CREATE TABLE IF NOT EXISTS suppliers (
-      supplierId TEXT PRIMARY KEY,
-      name TEXT NOT NULL,
-      contactPerson TEXT NOT NULL,
-      phone TEXT NOT NULL,
-      email TEXT NOT NULL,
-      categoryFocus TEXT NOT NULL,
-      lastDeliveryDate TEXT NOT NULL,
-      activeContracts INTEGER NOT NULL
-    );
+      supplierId VARCHAR(64) PRIMARY KEY,
+      name VARCHAR(255) NOT NULL,
+      contactPerson VARCHAR(255) NOT NULL,
+      phone VARCHAR(64) NOT NULL,
+      email VARCHAR(255) NOT NULL,
+      categoryFocus VARCHAR(255) NOT NULL,
+      lastDeliveryDate VARCHAR(32) NOT NULL,
+      activeContracts INT NOT NULL
+    ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
 
     CREATE TABLE IF NOT EXISTS branches (
-      branchId TEXT PRIMARY KEY,
-      name TEXT NOT NULL UNIQUE,
-      code TEXT NOT NULL UNIQUE,
-      address TEXT NOT NULL,
-      region TEXT NOT NULL,
-      contactPerson TEXT NOT NULL,
-      phone TEXT NOT NULL,
-      status TEXT NOT NULL
-    );
+      branchId VARCHAR(64) PRIMARY KEY,
+      name VARCHAR(255) NOT NULL UNIQUE,
+      code VARCHAR(64) NOT NULL UNIQUE,
+      address VARCHAR(255) NOT NULL,
+      region VARCHAR(128) NOT NULL,
+      contactPerson VARCHAR(255) NOT NULL,
+      phone VARCHAR(64) NOT NULL,
+      status VARCHAR(32) NOT NULL
+    ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
 
     CREATE TABLE IF NOT EXISTS receiving_receipts (
-      receiptId TEXT PRIMARY KEY,
-      receiptType TEXT NOT NULL,
-      supplierId TEXT NOT NULL,
-      supplierName TEXT NOT NULL,
-      arrivalDate TEXT NOT NULL,
-      signedBy TEXT NOT NULL,
-      receivedBy TEXT NOT NULL,
-      itemCount INTEGER NOT NULL,
-      totalQuantity INTEGER NOT NULL,
-      totalAmount REAL NOT NULL,
-      documentCount INTEGER NOT NULL,
-      documentStatus TEXT NOT NULL,
-      status TEXT NOT NULL
-    );
+      receiptId VARCHAR(64) PRIMARY KEY,
+      receiptType VARCHAR(32) NOT NULL,
+      supplierId VARCHAR(64) NOT NULL,
+      supplierName VARCHAR(255) NOT NULL,
+      arrivalDate VARCHAR(32) NOT NULL,
+      signedBy VARCHAR(255) NOT NULL,
+      receivedBy VARCHAR(255) NOT NULL,
+      itemCount INT NOT NULL,
+      totalQuantity INT NOT NULL,
+      totalAmount DOUBLE NOT NULL,
+      documentCount INT NOT NULL,
+      documentStatus VARCHAR(32) NOT NULL,
+      status VARCHAR(32) NOT NULL
+    ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
 
     CREATE TABLE IF NOT EXISTS hq_stock_items (
-      stockId TEXT PRIMARY KEY,
-      itemName TEXT NOT NULL UNIQUE,
-      category TEXT NOT NULL,
-      totalQuantity INTEGER NOT NULL,
-      serializedUnits INTEGER NOT NULL,
-      nonSerializedUnits INTEGER NOT NULL,
-      supplierName TEXT NOT NULL,
-      lastArrivalDate TEXT NOT NULL,
-      storageLocation TEXT NOT NULL,
-      status TEXT NOT NULL
-    );
+      stockId VARCHAR(64) PRIMARY KEY,
+      itemName VARCHAR(255) NOT NULL UNIQUE,
+      category VARCHAR(128) NOT NULL,
+      totalQuantity INT NOT NULL,
+      serializedUnits INT NOT NULL,
+      nonSerializedUnits INT NOT NULL,
+      supplierName VARCHAR(255) NOT NULL,
+      lastArrivalDate VARCHAR(32) NOT NULL,
+      storageLocation VARCHAR(255) NOT NULL,
+      status VARCHAR(32) NOT NULL
+    ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
 
     CREATE TABLE IF NOT EXISTS issue_records (
-      issueId TEXT PRIMARY KEY,
-      itemName TEXT NOT NULL,
-      serialNumber TEXT NOT NULL,
-      destinationType TEXT NOT NULL,
-      branchId TEXT,
-      issuedTo TEXT NOT NULL,
-      issuedBy TEXT NOT NULL,
-      address TEXT NOT NULL,
-      issueDate TEXT NOT NULL,
-      attachmentNames TEXT NOT NULL DEFAULT '[]',
-      notes TEXT,
-      acknowledgedBy TEXT,
-      acknowledgedAt TEXT,
-      acknowledgementNotes TEXT,
-      returnedBy TEXT,
-      returnedAt TEXT,
-      returnNotes TEXT,
-      status TEXT NOT NULL
-    );
+      issueId VARCHAR(64) PRIMARY KEY,
+      itemName VARCHAR(255) NOT NULL,
+      serialNumber VARCHAR(255) NOT NULL,
+      destinationType VARCHAR(32) NOT NULL,
+      branchId VARCHAR(64) NULL,
+      issuedTo VARCHAR(255) NOT NULL,
+      issuedBy VARCHAR(255) NOT NULL,
+      address VARCHAR(255) NOT NULL,
+      issueDate VARCHAR(32) NOT NULL,
+      attachmentNames LONGTEXT NOT NULL,
+      notes TEXT NULL,
+      acknowledgedBy VARCHAR(255) NULL,
+      acknowledgedAt VARCHAR(32) NULL,
+      acknowledgementNotes TEXT NULL,
+      returnedBy VARCHAR(255) NULL,
+      returnedAt VARCHAR(32) NULL,
+      returnNotes TEXT NULL,
+      status VARCHAR(32) NOT NULL
+    ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
 
     CREATE TABLE IF NOT EXISTS attachments (
-      attachmentId TEXT PRIMARY KEY,
-      entityType TEXT NOT NULL,
-      entityId TEXT NOT NULL,
-      originalName TEXT NOT NULL,
-      storedName TEXT NOT NULL,
-      storagePath TEXT NOT NULL,
-      mimeType TEXT NOT NULL,
-      fileSize INTEGER NOT NULL,
-      uploadedAt TEXT NOT NULL
-    );
+      attachmentId VARCHAR(64) PRIMARY KEY,
+      entityType VARCHAR(64) NOT NULL,
+      entityId VARCHAR(64) NOT NULL,
+      originalName VARCHAR(255) NOT NULL,
+      storedName VARCHAR(255) NOT NULL,
+      storagePath VARCHAR(512) NOT NULL,
+      mimeType VARCHAR(128) NOT NULL,
+      fileSize INT NOT NULL,
+      uploadedAt VARCHAR(32) NOT NULL
+    ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
 
     CREATE TABLE IF NOT EXISTS hq_serial_assets (
-      assetId TEXT PRIMARY KEY,
-      stockId TEXT NOT NULL,
-      itemName TEXT NOT NULL,
-      serialNumber TEXT NOT NULL UNIQUE,
-      supplierName TEXT NOT NULL,
-      lastArrivalDate TEXT NOT NULL,
-      storageLocation TEXT NOT NULL,
-      status TEXT NOT NULL,
-      issueId TEXT
-    );
+      assetId VARCHAR(64) PRIMARY KEY,
+      stockId VARCHAR(64) NOT NULL,
+      itemName VARCHAR(255) NOT NULL,
+      serialNumber VARCHAR(255) NOT NULL UNIQUE,
+      supplierName VARCHAR(255) NOT NULL,
+      lastArrivalDate VARCHAR(32) NOT NULL,
+      storageLocation VARCHAR(255) NOT NULL,
+      status VARCHAR(32) NOT NULL,
+      issueId VARCHAR(64) NULL
+    ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
 
     CREATE TABLE IF NOT EXISTS stock_movements (
-      movementId TEXT PRIMARY KEY,
-      movementType TEXT NOT NULL,
-      stockId TEXT NOT NULL,
-      itemName TEXT NOT NULL,
-      quantityDelta INTEGER NOT NULL,
-      movementDate TEXT NOT NULL,
-      referenceType TEXT NOT NULL,
-      referenceId TEXT NOT NULL,
-      storageLocation TEXT,
-      serialNumbers TEXT,
-      notes TEXT
-    );
-
-    CREATE INDEX IF NOT EXISTS idx_hq_serial_assets_item_status
-    ON hq_serial_assets (itemName, status);
-
-    CREATE INDEX IF NOT EXISTS idx_attachments_entity
-    ON attachments (entityType, entityId);
-
-    CREATE INDEX IF NOT EXISTS idx_stock_movements_reference
-    ON stock_movements (referenceType, referenceId);
-
-    CREATE INDEX IF NOT EXISTS idx_stock_movements_stock_date
-    ON stock_movements (stockId, movementDate);
+      movementId VARCHAR(64) PRIMARY KEY,
+      movementType VARCHAR(64) NOT NULL,
+      stockId VARCHAR(64) NOT NULL,
+      itemName VARCHAR(255) NOT NULL,
+      quantityDelta INT NOT NULL,
+      movementDate VARCHAR(32) NOT NULL,
+      referenceType VARCHAR(64) NOT NULL,
+      referenceId VARCHAR(64) NOT NULL,
+      storageLocation VARCHAR(255) NULL,
+      serialNumbers LONGTEXT NULL,
+      notes TEXT NULL
+    ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci
   `);
-    (0, stockLocationBalances_1.ensureStockLocationBalanceSchema)(db);
+    (0, stockLocationBalances_1.ensureStockLocationBalanceSchema)(database_1.db);
     migrateIssueRecordsTableIfNeeded();
     const stockMovementColumns = getTableColumns("stock_movements");
     if (stockMovementColumns.length > 0 &&
         !stockMovementColumns.includes("storageLocation")) {
-        db.exec(`
+        database_1.db.exec(`
       ALTER TABLE stock_movements
-      ADD COLUMN storageLocation TEXT
+      ADD COLUMN storageLocation VARCHAR(255)
     `);
     }
-    db.exec(`
-    CREATE INDEX IF NOT EXISTS idx_issue_records_status
-    ON issue_records (status, issueDate);
-
-    CREATE INDEX IF NOT EXISTS idx_issue_records_branch
-    ON issue_records (branchId, destinationType);
-  `);
-    const supplierCount = db.prepare("SELECT COUNT(*) AS count FROM suppliers").get().count || 0;
-    const branchCount = db.prepare("SELECT COUNT(*) AS count FROM branches").get().count || 0;
+    (0, database_1.ensureIndex)("hq_serial_assets", "idx_hq_serial_assets_item_status", [
+        "itemName",
+        "status",
+    ]);
+    (0, database_1.ensureIndex)("attachments", "idx_attachments_entity", [
+        "entityType",
+        "entityId",
+    ]);
+    (0, database_1.ensureIndex)("stock_movements", "idx_stock_movements_reference", [
+        "referenceType",
+        "referenceId",
+    ]);
+    (0, database_1.ensureIndex)("stock_movements", "idx_stock_movements_stock_date", [
+        "stockId",
+        "movementDate",
+    ]);
+    (0, database_1.ensureIndex)("issue_records", "idx_issue_records_status", [
+        "status",
+        "issueDate",
+    ]);
+    (0, database_1.ensureIndex)("issue_records", "idx_issue_records_branch", [
+        "branchId",
+        "destinationType",
+    ]);
+    const supplierCount = database_1.db.prepare("SELECT COUNT(*) AS count FROM suppliers").get().count || 0;
+    const branchCount = database_1.db.prepare("SELECT COUNT(*) AS count FROM branches").get().count || 0;
     if (supplierCount === 0) {
-        const insertSupplier = db.prepare(`
+        const insertSupplier = database_1.db.prepare(`
       INSERT INTO suppliers (
         supplierId,
         name,
@@ -624,7 +572,7 @@ const initializeDatabase = () => {
         });
     }
     if (branchCount === 0) {
-        const insertBranch = db.prepare(`
+        const insertBranch = database_1.db.prepare(`
       INSERT INTO branches (
         branchId,
         name,
@@ -645,7 +593,7 @@ const initializeDatabase = () => {
 };
 initializeDatabase();
 const getReceivingReceiptsData = () => {
-    return db
+    return database_1.db
         .prepare(`
         SELECT
           receiptId,
@@ -668,7 +616,7 @@ const getReceivingReceiptsData = () => {
 };
 exports.getReceivingReceiptsData = getReceivingReceiptsData;
 const getSuppliersData = () => {
-    return db
+    return database_1.db
         .prepare(`
         SELECT
           supplierId,
@@ -686,7 +634,7 @@ const getSuppliersData = () => {
 };
 exports.getSuppliersData = getSuppliersData;
 const getBranchesData = () => {
-    return db
+    return database_1.db
         .prepare(`
         SELECT
           branchId,
@@ -704,7 +652,7 @@ const getBranchesData = () => {
 };
 exports.getBranchesData = getBranchesData;
 const getHqStockData = () => {
-    const stockRows = db
+    const stockRows = database_1.db
         .prepare(`
         SELECT
           stockId,
@@ -721,8 +669,8 @@ const getHqStockData = () => {
         ORDER BY itemName ASC
       `)
         .all();
-    const locationBalancesByStockId = (0, stockLocationBalances_1.getStockLocationBalancesByStockIds)(db, stockRows.map((stockItem) => stockItem.stockId));
-    const availableSerialRows = db
+    const locationBalancesByStockId = (0, stockLocationBalances_1.getStockLocationBalancesByStockIds)(database_1.db, stockRows.map((stockItem) => stockItem.stockId));
+    const availableSerialRows = database_1.db
         .prepare(`
         SELECT
           stockId,
@@ -753,7 +701,7 @@ const getHqStockData = () => {
 };
 exports.getHqStockData = getHqStockData;
 const getStockMovementsByStockId = (stockId, limit = 12) => {
-    const rows = db
+    const rows = database_1.db
         .prepare(`
         SELECT
           movementId,
@@ -781,14 +729,14 @@ const getHqStockDetailData = (stockId) => {
         return null;
     }
     const availableSerialAssets = (0, exports.getAvailableSerialAssetsData)(stockItem.itemName);
-    const issuedSerialCount = db
+    const issuedSerialCount = database_1.db
         .prepare(`
           SELECT COUNT(*) AS count
           FROM hq_serial_assets
           WHERE stockId = ? AND status = 'Issued'
         `)
         .get(stockId).count || 0;
-    return Object.assign(Object.assign({}, stockItem), { availableSerialCount: availableSerialAssets.length, issuedSerialCount, locationBalances: (0, stockLocationBalances_1.getStockLocationBalancesByStockId)(db, stockId), recentMovements: getStockMovementsByStockId(stockId), availableSerialAssets });
+    return Object.assign(Object.assign({}, stockItem), { availableSerialCount: availableSerialAssets.length, issuedSerialCount, locationBalances: (0, stockLocationBalances_1.getStockLocationBalancesByStockId)(database_1.db, stockId), recentMovements: getStockMovementsByStockId(stockId), availableSerialAssets });
 };
 exports.getHqStockDetailData = getHqStockDetailData;
 const getIssueAttachmentsByIssueIds = (issueIds) => {
@@ -797,7 +745,7 @@ const getIssueAttachmentsByIssueIds = (issueIds) => {
         return attachmentsByIssueId;
     }
     const placeholders = issueIds.map(() => "?").join(", ");
-    const rows = db
+    const rows = database_1.db
         .prepare(`
         SELECT
           attachmentId,
@@ -823,7 +771,7 @@ const getIssueAttachmentsByIssueIds = (issueIds) => {
     return attachmentsByIssueId;
 };
 const getIssueRecordsData = () => {
-    const rows = db
+    const rows = database_1.db
         .prepare(`
         SELECT
           issueId,
@@ -865,7 +813,7 @@ const getIssueRecordByIdData = (issueId) => {
 };
 exports.getIssueRecordByIdData = getIssueRecordByIdData;
 const getIssueAttachmentByIdData = (attachmentId) => {
-    const row = db
+    const row = database_1.db
         .prepare(`
         SELECT
           attachmentId,
@@ -888,7 +836,7 @@ const getIssueAttachmentByIdData = (attachmentId) => {
 exports.getIssueAttachmentByIdData = getIssueAttachmentByIdData;
 const getAvailableSerialAssetsData = (itemName) => {
     const rows = itemName
-        ? db
+        ? database_1.db
             .prepare(`
             SELECT
               assetId,
@@ -905,7 +853,7 @@ const getAvailableSerialAssetsData = (itemName) => {
             ORDER BY itemName ASC, serialNumber ASC
           `)
             .all(itemName)
-        : db
+        : database_1.db
             .prepare(`
             SELECT
               assetId,
@@ -926,7 +874,7 @@ const getAvailableSerialAssetsData = (itemName) => {
 };
 exports.getAvailableSerialAssetsData = getAvailableSerialAssetsData;
 const getBranchById = (branchId) => {
-    return db
+    return database_1.db
         .prepare(`
           SELECT
             branchId,
@@ -943,7 +891,7 @@ const getBranchById = (branchId) => {
         .get(branchId);
 };
 const getBranchByName = (branchName) => {
-    return db
+    return database_1.db
         .prepare(`
           SELECT
             branchId,
@@ -960,7 +908,7 @@ const getBranchByName = (branchName) => {
         .get(branchName);
 };
 const updateHqStockLevels = (stockItem, nextTotalQuantity) => {
-    const remainingAvailableSerials = db
+    const remainingAvailableSerials = database_1.db
         .prepare(`
           SELECT COUNT(*) AS count
           FROM hq_serial_assets
@@ -970,7 +918,7 @@ const updateHqStockLevels = (stockItem, nextTotalQuantity) => {
     const nextSerializedUnits = Math.min(remainingAvailableSerials, nextTotalQuantity);
     const nextNonSerializedUnits = Math.max(nextTotalQuantity - nextSerializedUnits, 0);
     const nextStatus = getHqStockStatus(stockItem.status, nextTotalQuantity);
-    db.prepare(`
+    database_1.db.prepare(`
       UPDATE hq_stock_items
       SET
         totalQuantity = ?,
@@ -982,9 +930,7 @@ const updateHqStockLevels = (stockItem, nextTotalQuantity) => {
 };
 const createIssueRecordData = (newIssueRecord, uploadedAttachments = []) => {
     var _a, _b, _c, _d, _e, _f, _g;
-    const highestIssueSequence = db
-        .prepare("SELECT MAX(CAST(SUBSTR(issueId, 10) AS INTEGER)) AS sequence FROM issue_records")
-        .get().sequence || 0;
+    const highestIssueSequence = database_1.db.getNumericSuffixSequence("issue_records", "issueId", 10);
     const issueId = `ISS-${new Date().getFullYear()}-${String(highestIssueSequence + 1).padStart(3, "0")}`;
     const normalizedInput = normalizeIssueRecordInput(newIssueRecord);
     const isBranchIssue = newIssueRecord.destinationType === "Branch";
@@ -1020,7 +966,7 @@ const createIssueRecordData = (newIssueRecord, uploadedAttachments = []) => {
     if (!resolvedIssuedTo || !resolvedAddress) {
         throw new Error("Missing required issue-out fields");
     }
-    const existingActiveIssue = db
+    const existingActiveIssue = database_1.db
         .prepare(`
         SELECT issueId
         FROM issue_records
@@ -1030,7 +976,7 @@ const createIssueRecordData = (newIssueRecord, uploadedAttachments = []) => {
     if (existingActiveIssue) {
         throw new Error("This serial number has already been issued");
     }
-    const matchingStockItem = db
+    const matchingStockItem = database_1.db
         .prepare("SELECT * FROM hq_stock_items WHERE itemName = ?")
         .get(normalizedInput.itemName);
     if (!matchingStockItem) {
@@ -1039,7 +985,7 @@ const createIssueRecordData = (newIssueRecord, uploadedAttachments = []) => {
     if (matchingStockItem.totalQuantity <= 0) {
         throw new Error("No stock remains for this item");
     }
-    const availableSerialAsset = db
+    const availableSerialAsset = database_1.db
         .prepare(`
         SELECT
           assetId,
@@ -1072,9 +1018,9 @@ const createIssueRecordData = (newIssueRecord, uploadedAttachments = []) => {
         notes: normalizedInput.notes,
         status: "Issued",
     };
-    db.exec("BEGIN");
+    database_1.db.exec("BEGIN");
     try {
-        db.prepare(`
+        database_1.db.prepare(`
         INSERT INTO issue_records (
           issueId,
           itemName,
@@ -1097,7 +1043,7 @@ const createIssueRecordData = (newIssueRecord, uploadedAttachments = []) => {
         ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
       `).run(createdRecord.issueId, createdRecord.itemName, createdRecord.serialNumber, createdRecord.destinationType, (_d = createdRecord.branchId) !== null && _d !== void 0 ? _d : null, createdRecord.issuedTo, createdRecord.issuedBy, createdRecord.address, createdRecord.issueDate, JSON.stringify(createdRecord.attachmentNames), (_e = createdRecord.notes) !== null && _e !== void 0 ? _e : null, null, null, null, null, null, null, createdRecord.status);
         if (uploadedAttachments.length > 0) {
-            const insertAttachment = db.prepare(`
+            const insertAttachment = database_1.db.prepare(`
           INSERT INTO attachments (
             attachmentId,
             entityType,
@@ -1127,14 +1073,14 @@ const createIssueRecordData = (newIssueRecord, uploadedAttachments = []) => {
                 });
             });
         }
-        db.prepare(`
+        database_1.db.prepare(`
         UPDATE hq_serial_assets
         SET
           status = 'Issued',
           issueId = ?
         WHERE assetId = ?
       `).run(createdRecord.issueId, availableSerialAsset.assetId);
-        db.prepare(`
+        database_1.db.prepare(`
         INSERT INTO stock_movements (
           movementId,
           movementType,
@@ -1149,7 +1095,7 @@ const createIssueRecordData = (newIssueRecord, uploadedAttachments = []) => {
           notes
         ) VALUES (?, 'Issue Out', ?, ?, ?, ?, 'issue_record', ?, ?, ?, ?)
       `).run(`${createdRecord.issueId}-MOVE-001`, matchingStockItem.stockId, createdRecord.itemName, -1, createdRecord.issueDate, createdRecord.issueId, availableSerialAsset.storageLocation, JSON.stringify([createdRecord.serialNumber]), (_f = createdRecord.notes) !== null && _f !== void 0 ? _f : null);
-        (0, stockLocationBalances_1.adjustStockLocationBalance)(db, {
+        (0, stockLocationBalances_1.adjustStockLocationBalance)(database_1.db, {
             stockId: matchingStockItem.stockId,
             storageLocation: availableSerialAsset.storageLocation,
             quantityDelta: -1,
@@ -1158,10 +1104,10 @@ const createIssueRecordData = (newIssueRecord, uploadedAttachments = []) => {
             movementDate: createdRecord.issueDate,
         });
         updateHqStockLevels(matchingStockItem, nextTotalQuantity);
-        db.exec("COMMIT");
+        database_1.db.exec("COMMIT");
     }
     catch (error) {
-        db.exec("ROLLBACK");
+        database_1.db.exec("ROLLBACK");
         throw error;
     }
     return (_g = (0, exports.getIssueRecordByIdData)(issueId)) !== null && _g !== void 0 ? _g : createdRecord;
@@ -1185,7 +1131,7 @@ const acknowledgeIssueRecordData = (issueId, acknowledgement) => {
     if (!acknowledgedBy) {
         throw new Error("Missing acknowledgement fields");
     }
-    db.prepare(`
+    database_1.db.prepare(`
       UPDATE issue_records
       SET
         status = 'Acknowledged',
@@ -1212,12 +1158,12 @@ const returnIssueRecordData = (issueId, issueReturn) => {
     if (!returnedBy) {
         throw new Error("Missing return fields");
     }
-    db.exec("BEGIN");
+    database_1.db.exec("BEGIN");
     try {
-        const matchingStockItem = db
+        const matchingStockItem = database_1.db
             .prepare("SELECT * FROM hq_stock_items WHERE itemName = ?")
             .get(issueRecord.itemName);
-        const serialAsset = db
+        const serialAsset = database_1.db
             .prepare(`
         SELECT
           assetId,
@@ -1245,14 +1191,14 @@ const returnIssueRecordData = (issueId, issueReturn) => {
             throw new Error("Serial asset is linked to the wrong HQ stock item");
         }
         const nextTotalQuantity = matchingStockItem.totalQuantity + 1;
-        db.prepare(`
+        database_1.db.prepare(`
         UPDATE hq_serial_assets
         SET
           status = 'Available',
           issueId = NULL
         WHERE assetId = ?
       `).run(serialAsset.assetId);
-        db.prepare(`
+        database_1.db.prepare(`
         INSERT INTO stock_movements (
           movementId,
           movementType,
@@ -1267,7 +1213,7 @@ const returnIssueRecordData = (issueId, issueReturn) => {
           notes
         ) VALUES (?, 'Return', ?, ?, ?, ?, 'issue_record', ?, ?, ?, ?)
       `).run(`${issueId}-MOVE-RET-001`, matchingStockItem.stockId, issueRecord.itemName, 1, returnedAt, issueId, serialAsset.storageLocation, JSON.stringify([issueRecord.serialNumber]), returnNotes !== null && returnNotes !== void 0 ? returnNotes : null);
-        (0, stockLocationBalances_1.adjustStockLocationBalance)(db, {
+        (0, stockLocationBalances_1.adjustStockLocationBalance)(database_1.db, {
             stockId: matchingStockItem.stockId,
             storageLocation: serialAsset.storageLocation,
             quantityDelta: 1,
@@ -1276,7 +1222,7 @@ const returnIssueRecordData = (issueId, issueReturn) => {
             movementDate: returnedAt,
         });
         updateHqStockLevels(matchingStockItem, nextTotalQuantity);
-        db.prepare(`
+        database_1.db.prepare(`
         UPDATE issue_records
         SET
           status = 'Returned',
@@ -1285,10 +1231,10 @@ const returnIssueRecordData = (issueId, issueReturn) => {
           returnNotes = ?
         WHERE issueId = ?
       `).run(returnedBy, returnedAt, returnNotes !== null && returnNotes !== void 0 ? returnNotes : null, issueId);
-        db.exec("COMMIT");
+        database_1.db.exec("COMMIT");
     }
     catch (error) {
-        db.exec("ROLLBACK");
+        database_1.db.exec("ROLLBACK");
         throw error;
     }
     return (0, exports.getIssueRecordByIdData)(issueId);

@@ -17,4 +17,13 @@ This repository powers the Omari HQ inventory workflow: receiving goods into HQ,
 ## Project Structure
 
 - **frontend/**: Next.js application with route wrappers in `src/app`, route-level screens in `src/screens`, shared UI in `src/components`, and API/store code in `src/services`.
-- **backend/**: Express/TypeScript API for the Omari operations workflows plus Prisma schema files documenting the longer-term data model direction.
+- **backend/**: Express/TypeScript API for the Omari operations workflows, wired for MySQL across runtime, schema bootstrap, and regression testing.
+
+## Database Runtime
+
+- Runtime target: MySQL
+- Backend env template: `backend/.env.example`
+- Verified during regression and smoke testing with MySQL 8.0
+- Current backend driver expects an application user configured with `mysql_native_password`
+
+The backend now expects MySQL credentials to be configured before startup. Regression coverage also runs against ephemeral MySQL instances, so the repo uses one database engine end to end.

@@ -23,20 +23,16 @@ const getNextStockLocationBalanceId = (db, stockId) => {
 const ensureStockLocationBalanceSchema = (db) => {
     db.exec(`
     CREATE TABLE IF NOT EXISTS hq_stock_location_balances (
-      balanceId TEXT PRIMARY KEY,
-      stockId TEXT NOT NULL,
-      storageLocation TEXT NOT NULL,
-      totalQuantity INTEGER NOT NULL,
-      serializedUnits INTEGER NOT NULL DEFAULT 0,
-      nonSerializedUnits INTEGER NOT NULL DEFAULT 0,
-      lastMovementDate TEXT NOT NULL
-    );
-
-    CREATE UNIQUE INDEX IF NOT EXISTS idx_hq_stock_location_balances_unique
-    ON hq_stock_location_balances (stockId, storageLocation);
-
-    CREATE INDEX IF NOT EXISTS idx_hq_stock_location_balances_stock
-    ON hq_stock_location_balances (stockId, totalQuantity DESC, storageLocation ASC);
+      balanceId VARCHAR(64) PRIMARY KEY,
+      stockId VARCHAR(64) NOT NULL,
+      storageLocation VARCHAR(255) NOT NULL,
+      totalQuantity INT NOT NULL,
+      serializedUnits INT NOT NULL DEFAULT 0,
+      nonSerializedUnits INT NOT NULL DEFAULT 0,
+      lastMovementDate VARCHAR(32) NOT NULL,
+      UNIQUE KEY idx_hq_stock_location_balances_unique (stockId, storageLocation),
+      KEY idx_hq_stock_location_balances_stock (stockId, totalQuantity, storageLocation)
+    ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci
   `);
 };
 exports.ensureStockLocationBalanceSchema = ensureStockLocationBalanceSchema;

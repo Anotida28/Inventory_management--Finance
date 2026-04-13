@@ -4,17 +4,9 @@ var __importDefault = (this && this.__importDefault) || function (mod) {
 };
 Object.defineProperty(exports, "__esModule", { value: true });
 exports.verifyAccessToken = exports.loginUserData = exports.registerInitialUserData = exports.createUserData = exports.listUsersData = exports.getUserByIdData = exports.getAuthBootstrapStatusData = void 0;
-const fs_1 = __importDefault(require("fs"));
-const path_1 = __importDefault(require("path"));
 const bcryptjs_1 = __importDefault(require("bcryptjs"));
 const jsonwebtoken_1 = __importDefault(require("jsonwebtoken"));
-const { DatabaseSync } = require("node:sqlite");
-const configuredDatabasePath = process.env.OPERATIONS_DB_PATH || "./data/operations.sqlite";
-const resolvedDatabasePath = path_1.default.isAbsolute(configuredDatabasePath)
-    ? configuredDatabasePath
-    : path_1.default.join(process.cwd(), configuredDatabasePath);
-fs_1.default.mkdirSync(path_1.default.dirname(resolvedDatabasePath), { recursive: true });
-const db = new DatabaseSync(resolvedDatabasePath);
+const database_1 = require("./database");
 const AUTH_TOKEN_TTL_SECONDS = 60 * 60 * 8;
 const AUTH_TOKEN_TTL = `${AUTH_TOKEN_TTL_SECONDS}s`;
 const allowedRoles = ["SUPER_ADMIN", "ADMIN", "USER", "VIEWER"];
@@ -31,26 +23,22 @@ const isValidEmail = (value) => /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(value);
 const isValidUsername = (value) => /^[a-z0-9._-]{3,32}$/i.test(value);
 const getJwtSecret = () => process.env.JWT_SECRET || "dev-secret";
 const ensureAuthSchema = () => {
-    db.exec(`
+    database_1.db.exec(`
     CREATE TABLE IF NOT EXISTS auth_users (
-      userId TEXT PRIMARY KEY,
-      username TEXT NOT NULL UNIQUE,
-      name TEXT NOT NULL,
-      email TEXT NOT NULL UNIQUE,
-      passwordHash TEXT NOT NULL,
-      role TEXT NOT NULL,
-      status TEXT NOT NULL DEFAULT 'Active',
-      createdAt TEXT NOT NULL,
-      updatedAt TEXT NOT NULL,
-      lastLogin TEXT
-    );
-
-    CREATE INDEX IF NOT EXISTS idx_auth_users_username
-    ON auth_users (username);
-
-    CREATE INDEX IF NOT EXISTS idx_auth_users_email
-    ON auth_users (email);
+      userId VARCHAR(64) PRIMARY KEY,
+      username VARCHAR(64) NOT NULL UNIQUE,
+      name VARCHAR(255) NOT NULL,
+      email VARCHAR(255) NOT NULL UNIQUE,
+      passwordHash VARCHAR(255) NOT NULL,
+      role VARCHAR(32) NOT NULL,
+      status VARCHAR(32) NOT NULL DEFAULT 'Active',
+      createdAt VARCHAR(32) NOT NULL,
+      updatedAt VARCHAR(32) NOT NULL,
+      lastLogin VARCHAR(32) NULL
+    ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci
   `);
+    (0, database_1.ensureIndex)("auth_users", "idx_auth_users_username", ["username"]);
+    (0, database_1.ensureIndex)("auth_users", "idx_auth_users_email", ["email"]);
 };
 ensureAuthSchema();
 const mapAuthUser = (row) => {
@@ -68,13 +56,11 @@ const mapAuthUser = (row) => {
     });
 };
 const getNextUserId = () => {
-    const highestSequence = db
-        .prepare("SELECT MAX(CAST(SUBSTR(userId, 5) AS INTEGER)) AS sequence FROM auth_users")
-        .get().sequence || 0;
+    const highestSequence = database_1.db.getNumericSuffixSequence("auth_users", "userId", 5);
     return `USR-${String(highestSequence + 1).padStart(3, "0")}`;
 };
 const getAuthUserRowById = (userId) => {
-    return db
+    return database_1.db
         .prepare(`
         SELECT
           userId,
@@ -93,7 +79,7 @@ const getAuthUserRowById = (userId) => {
         .get(userId);
 };
 const getAuthUserRowByIdentifier = (identifier) => {
-    return db
+    return database_1.db
         .prepare(`
         SELECT
           userId,
@@ -112,11 +98,11 @@ const getAuthUserRowByIdentifier = (identifier) => {
         .get(identifier, identifier);
 };
 const getUserCount = () => {
-    return db.prepare("SELECT COUNT(*) AS count FROM auth_users").get().count || 0;
+    return database_1.db.prepare("SELECT COUNT(*) AS count FROM auth_users").get().count || 0;
 };
 const updateUserLoginTimestamp = (userId) => {
     const lastLogin = new Date().toISOString();
-    db.prepare(`
+    database_1.db.prepare(`
       UPDATE auth_users
       SET
         lastLogin = ?,
@@ -165,13 +151,13 @@ const validateCommonUserFields = (payload) => {
     };
 };
 const ensureUserIsUnique = (username, email) => {
-    const duplicateByUsername = db
+    const duplicateByUsername = database_1.db
         .prepare("SELECT userId FROM auth_users WHERE username = ?")
         .get(username);
     if (duplicateByUsername) {
         throw new Error("Username is already in use");
     }
-    const duplicateByEmail = db
+    const duplicateByEmail = database_1.db
         .prepare("SELECT userId FROM auth_users WHERE email = ?")
         .get(email);
     if (duplicateByEmail) {
@@ -192,7 +178,7 @@ const getUserByIdData = (userId) => {
 };
 exports.getUserByIdData = getUserByIdData;
 const listUsersData = () => {
-    const rows = db
+    const rows = database_1.db
         .prepare(`
         SELECT
           userId,
@@ -233,7 +219,7 @@ const createUserData = (payload, actor) => {
         createdAt: timestamp,
         updatedAt: timestamp,
     };
-    db.prepare(`
+    database_1.db.prepare(`
       INSERT INTO auth_users (
         userId,
         username,
@@ -267,7 +253,7 @@ const registerInitialUserData = (payload) => {
         createdAt: timestamp,
         updatedAt: timestamp,
     };
-    db.prepare(`
+    database_1.db.prepare(`
       INSERT INTO auth_users (
         userId,
         username,

@@ -3,11 +3,11 @@ generator client {
 }
 
 datasource db {
-  provider = "sqlite"
-  url      = env("DATABASE_URL")
+  provider = "mysql"
+  url      = env("PRISMA_DATABASE_URL")
 }
 
-// SQLite-backed status fields are modeled as strings for now.
+// Status fields are modeled as strings for now.
 // Expected values:
 // - User.role: ADMIN, STORES_OFFICER, REVIEWER, VIEWER, BRANCH_RECEIVER
 // - Supplier.status: ACTIVE, INACTIVE

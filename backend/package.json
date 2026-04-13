@@ -25,7 +25,8 @@
     "morgan": "^1.10.0",
     "multer": "^2.1.1",
     "prisma": "^5.16.2",
-    "rimraf": "^6.0.1"
+    "rimraf": "^6.0.1",
+    "sync-mysql": "^3.0.1"
   },
   "devDependencies": {
     "@types/cors": "^2.8.17",
@@ -34,6 +35,8 @@
     "@types/morgan": "^1.9.9",
     "@types/multer": "^2.1.0",
     "@types/node": "^20.14.10",
+    "mysql-memory-server": "^1.14.1",
+    "mysql2": "^3.22.0",
     "nodemon": "^3.1.4",
     "ts-node": "^10.9.2",
     "typescript": "^5.5.3"

@@ -1,16 +1,11 @@
-import fs from "fs";
-import path from "path";
 import { UploadedReceiptAttachment } from "./receiptUploads";
+import { db, ensureIndex } from "./database";
 import {
   adjustStockLocationBalance,
   ensureStockLocationBalanceSchema,
   getPrimaryStorageLocation,
   getStockLocationBalancesByStockIds,
 } from "./stockLocationBalances";
-
-const { DatabaseSync } = require("node:sqlite") as {
-  DatabaseSync: new (path: string) => any;
-};
 
 type Supplier = {
   supplierId: string;
@@ -148,22 +143,8 @@ const stockLocationSeeds: StockLocationSeed[] = [
   { locationId: "LOC-007", locationName: "HQ Rack E2" },
 ];
 
-const configuredDatabasePath =
-  process.env.OPERATIONS_DB_PATH || "./data/operations.sqlite";
-const resolvedDatabasePath = path.isAbsolute(configuredDatabasePath)
-  ? configuredDatabasePath
-  : path.join(process.cwd(), configuredDatabasePath);
-
-fs.mkdirSync(path.dirname(resolvedDatabasePath), { recursive: true });
-
-const db = new DatabaseSync(resolvedDatabasePath);
-
 const getTableColumns = (tableName: string) => {
-  return (
-    db
-      .prepare(`PRAGMA table_info(${tableName})`)
-      .all() as Array<{ name: string }>
-  ).map((column) => column.name);
+  return db.getTableColumns(tableName);
 };
 
 const parseJsonArray = (value: string | null) => {
@@ -210,59 +191,63 @@ const getPublicApiBaseUrl = () =>
 const ensureExtendedReceivingSchema = () => {
   db.exec(`
     CREATE TABLE IF NOT EXISTS stock_locations (
-      locationId TEXT PRIMARY KEY,
-      locationName TEXT NOT NULL UNIQUE
-    );
+      locationId VARCHAR(64) PRIMARY KEY,
+      locationName VARCHAR(255) NOT NULL UNIQUE
+    ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
 
     CREATE TABLE IF NOT EXISTS receiving_receipt_lines (
-      lineId TEXT PRIMARY KEY,
-      receiptId TEXT NOT NULL,
-      lineNumber INTEGER NOT NULL,
-      itemName TEXT NOT NULL,
-      category TEXT NOT NULL,
-      quantity INTEGER NOT NULL,
-      unitCost REAL NOT NULL,
-      totalCost REAL NOT NULL,
-      storageLocation TEXT NOT NULL,
-      isSerialized INTEGER NOT NULL DEFAULT 0,
-      serialNumbers TEXT NOT NULL DEFAULT '[]'
-    );
+      lineId VARCHAR(96) PRIMARY KEY,
+      receiptId VARCHAR(64) NOT NULL,
+      lineNumber INT NOT NULL,
+      itemName VARCHAR(255) NOT NULL,
+      category VARCHAR(128) NOT NULL,
+      quantity INT NOT NULL,
+      unitCost DOUBLE NOT NULL,
+      totalCost DOUBLE NOT NULL,
+      storageLocation VARCHAR(255) NOT NULL,
+      isSerialized TINYINT(1) NOT NULL DEFAULT 0,
+      serialNumbers LONGTEXT NOT NULL
+    ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
 
     CREATE TABLE IF NOT EXISTS stock_movements (
-      movementId TEXT PRIMARY KEY,
-      movementType TEXT NOT NULL,
-      stockId TEXT NOT NULL,
-      itemName TEXT NOT NULL,
-      quantityDelta INTEGER NOT NULL,
-      movementDate TEXT NOT NULL,
-      referenceType TEXT NOT NULL,
-      referenceId TEXT NOT NULL,
-      storageLocation TEXT,
-      serialNumbers TEXT,
-      notes TEXT
-    );
+      movementId VARCHAR(96) PRIMARY KEY,
+      movementType VARCHAR(64) NOT NULL,
+      stockId VARCHAR(64) NOT NULL,
+      itemName VARCHAR(255) NOT NULL,
+      quantityDelta INT NOT NULL,
+      movementDate VARCHAR(32) NOT NULL,
+      referenceType VARCHAR(64) NOT NULL,
+      referenceId VARCHAR(64) NOT NULL,
+      storageLocation VARCHAR(255) NULL,
+      serialNumbers LONGTEXT NULL,
+      notes TEXT NULL
+    ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
 
     CREATE TABLE IF NOT EXISTS attachments (
-      attachmentId TEXT PRIMARY KEY,
-      entityType TEXT NOT NULL,
-      entityId TEXT NOT NULL,
-      originalName TEXT NOT NULL,
-      storedName TEXT NOT NULL,
-      storagePath TEXT NOT NULL,
-      mimeType TEXT NOT NULL,
-      fileSize INTEGER NOT NULL,
-      uploadedAt TEXT NOT NULL
-    );
-
-    CREATE INDEX IF NOT EXISTS idx_receiving_receipt_lines_receipt
-    ON receiving_receipt_lines (receiptId, lineNumber);
-
-    CREATE INDEX IF NOT EXISTS idx_attachments_entity
-    ON attachments (entityType, entityId);
-
-    CREATE INDEX IF NOT EXISTS idx_stock_movements_reference
-    ON stock_movements (referenceType, referenceId);
+      attachmentId VARCHAR(96) PRIMARY KEY,
+      entityType VARCHAR(64) NOT NULL,
+      entityId VARCHAR(64) NOT NULL,
+      originalName VARCHAR(255) NOT NULL,
+      storedName VARCHAR(255) NOT NULL,
+      storagePath VARCHAR(512) NOT NULL,
+      mimeType VARCHAR(128) NOT NULL,
+      fileSize INT NOT NULL,
+      uploadedAt VARCHAR(32) NOT NULL
+    ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci
   `);
+
+  ensureIndex("receiving_receipt_lines", "idx_receiving_receipt_lines_receipt", [
+    "receiptId",
+    "lineNumber",
+  ]);
+  ensureIndex("attachments", "idx_attachments_entity", [
+    "entityType",
+    "entityId",
+  ]);
+  ensureIndex("stock_movements", "idx_stock_movements_reference", [
+    "referenceType",
+    "referenceId",
+  ]);
 
   ensureStockLocationBalanceSchema(db);
 
@@ -274,7 +259,7 @@ const ensureExtendedReceivingSchema = () => {
   ) {
     db.exec(`
       ALTER TABLE stock_movements
-      ADD COLUMN storageLocation TEXT
+      ADD COLUMN storageLocation VARCHAR(255)
     `);
   }
 
@@ -511,13 +496,11 @@ const ensureStockLocationExists = (storageLocation: string) => {
     return;
   }
 
-  const highestSequence =
-    db
-      .prepare(
-        "SELECT MAX(CAST(SUBSTR(locationId, 5) AS INTEGER)) AS sequence FROM stock_locations"
-      )
-      .get().sequence || 0;
-
+  const highestSequence = db.getNumericSuffixSequence(
+    "stock_locations",
+    "locationId",
+    5
+  );
   const locationId = `LOC-${String(highestSequence + 1).padStart(3, "0")}`;
 
   db.prepare(
@@ -529,12 +512,11 @@ const ensureStockLocationExists = (storageLocation: string) => {
 };
 
 const getNextReceiptId = () => {
-  const highestSequence =
-    db
-      .prepare(
-        "SELECT MAX(CAST(SUBSTR(receiptId, 10) AS INTEGER)) AS sequence FROM receiving_receipts"
-      )
-      .get().sequence || 0;
+  const highestSequence = db.getNumericSuffixSequence(
+    "receiving_receipts",
+    "receiptId",
+    10
+  );
 
   return `RCV-${new Date().getFullYear()}-${String(highestSequence + 1).padStart(
     3,
@@ -543,12 +525,11 @@ const getNextReceiptId = () => {
 };
 
 const getNextStockId = () => {
-  const highestSequence =
-    db
-      .prepare(
-        "SELECT MAX(CAST(SUBSTR(stockId, 5) AS INTEGER)) AS sequence FROM hq_stock_items"
-      )
-      .get().sequence || 0;
+  const highestSequence = db.getNumericSuffixSequence(
+    "hq_stock_items",
+    "stockId",
+    5
+  );
 
   return `STK-${String(highestSequence + 1).padStart(3, "0")}`;
 };

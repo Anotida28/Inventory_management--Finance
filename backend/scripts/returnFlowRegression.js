@@ -1,20 +1,5 @@
 const assert = require("node:assert/strict");
-const fs = require("node:fs");
-const os = require("node:os");
-const path = require("node:path");
-
-const { DatabaseSync } = require("node:sqlite");
-
-const createTempDatabasePath = () => {
-  const tempDirectory = fs.mkdtempSync(
-    path.join(os.tmpdir(), "omari-return-regression-")
-  );
-
-  return {
-    tempDirectory,
-    databasePath: path.join(tempDirectory, "operations.sqlite"),
-  };
-};
+const { createMysqlTestHarness } = require("./mysqlTestHarness");
 
 const readStockQuantity = (db, itemName) =>
   db.prepare("SELECT totalQuantity FROM hq_stock_items WHERE itemName = ?").get(
@@ -409,11 +394,9 @@ const seedReturnScenarios = (db) => {
   });
 };
 
-const main = () => {
-  const { tempDirectory, databasePath } = createTempDatabasePath();
-  let db;
-
-  process.env.OPERATIONS_DB_PATH = databasePath;
+const main = async () => {
+  const harness = await createMysqlTestHarness("omari_return_regression");
+  const db = harness.db;
 
   try {
     const {
@@ -427,7 +410,6 @@ const main = () => {
     const {
       createReceivingReceiptData,
     } = require("../dist/lib/receivingData.js");
-    db = new DatabaseSync(databasePath);
     seedReturnScenarios(db);
 
     const issuedAssets = [
@@ -706,23 +688,11 @@ const main = () => {
 
     console.log("Operations regression checks passed.");
   } finally {
-    delete process.env.OPERATIONS_DB_PATH;
-
-    if (db && typeof db.close === "function") {
-      db.close();
-    }
-
-    try {
-      fs.rmSync(tempDirectory, { recursive: true, force: true });
-    } catch {
-      // Cleanup is best-effort because the imported module releases its DB handle on process exit.
-    }
+    await harness.stop();
   }
 };
 
-try {
-  main();
-} catch (error) {
+main().catch((error) => {
   console.error(error);
   process.exit(1);
-}
+});

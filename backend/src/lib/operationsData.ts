@@ -1,6 +1,5 @@
-import fs from "fs";
-import path from "path";
 import { getBusinessTodayDate } from "./date";
+import { db, ensureIndex } from "./database";
 import { UploadedIssueAttachment } from "./issueUploads";
 import {
   adjustStockLocationBalance,
@@ -10,10 +9,6 @@ import {
   getStorageLocationSummary,
   type StockLocationBalance,
 } from "./stockLocationBalances";
-
-const { DatabaseSync } = require("node:sqlite") as {
-  DatabaseSync: new (path: string) => any;
-};
 
 type Supplier = {
   supplierId: string;
@@ -294,16 +289,6 @@ const branchSeeds: Branch[] = [
   },
 ];
 
-const configuredDatabasePath =
-  process.env.OPERATIONS_DB_PATH || "./data/operations.sqlite";
-const resolvedDatabasePath = path.isAbsolute(configuredDatabasePath)
-  ? configuredDatabasePath
-  : path.join(process.cwd(), configuredDatabasePath);
-
-fs.mkdirSync(path.dirname(resolvedDatabasePath), { recursive: true });
-
-const db = new DatabaseSync(resolvedDatabasePath);
-
 const parseAttachmentNames = (value: string | null) => {
   if (!value) return [];
 
@@ -414,11 +399,7 @@ const getHqStockStatus = (
 };
 
 const getTableColumns = (tableName: string) => {
-  return (
-    db
-      .prepare(`PRAGMA table_info(${tableName})`)
-      .all() as Array<{ name: string }>
-  ).map((column) => column.name);
+  return db.getTableColumns(tableName);
 };
 
 const migrateIssueRecordsTableIfNeeded = () => {
@@ -437,82 +418,42 @@ const migrateIssueRecordsTableIfNeeded = () => {
     return;
   }
 
-  db.exec("BEGIN");
+  const missingColumns = [
+    {
+      name: "branchId",
+      definition: "VARCHAR(64) NULL AFTER destinationType",
+    },
+    {
+      name: "acknowledgedBy",
+      definition: "VARCHAR(255) NULL AFTER notes",
+    },
+    {
+      name: "acknowledgedAt",
+      definition: "VARCHAR(32) NULL AFTER acknowledgedBy",
+    },
+    {
+      name: "acknowledgementNotes",
+      definition: "TEXT NULL AFTER acknowledgedAt",
+    },
+    {
+      name: "returnedBy",
+      definition: "VARCHAR(255) NULL AFTER acknowledgementNotes",
+    },
+    {
+      name: "returnedAt",
+      definition: "VARCHAR(32) NULL AFTER returnedBy",
+    },
+    {
+      name: "returnNotes",
+      definition: "TEXT NULL AFTER returnedAt",
+    },
+  ].filter((column) => !issueRecordColumns.includes(column.name));
 
-  try {
-    db.exec(`
-      ALTER TABLE issue_records RENAME TO issue_records_legacy;
-
-      CREATE TABLE issue_records (
-        issueId TEXT PRIMARY KEY,
-        itemName TEXT NOT NULL,
-        serialNumber TEXT NOT NULL,
-        destinationType TEXT NOT NULL,
-        branchId TEXT,
-        issuedTo TEXT NOT NULL,
-        issuedBy TEXT NOT NULL,
-        address TEXT NOT NULL,
-        issueDate TEXT NOT NULL,
-        attachmentNames TEXT NOT NULL DEFAULT '[]',
-        notes TEXT,
-        acknowledgedBy TEXT,
-        acknowledgedAt TEXT,
-        acknowledgementNotes TEXT,
-        returnedBy TEXT,
-        returnedAt TEXT,
-        returnNotes TEXT,
-        status TEXT NOT NULL
-      );
-
-      INSERT INTO issue_records (
-        issueId,
-        itemName,
-        serialNumber,
-        destinationType,
-        branchId,
-        issuedTo,
-        issuedBy,
-        address,
-        issueDate,
-        attachmentNames,
-        notes,
-        acknowledgedBy,
-        acknowledgedAt,
-        acknowledgementNotes,
-        returnedBy,
-        returnedAt,
-        returnNotes,
-        status
-      )
-      SELECT
-        issueId,
-        itemName,
-        serialNumber,
-        destinationType,
-        NULL,
-        issuedTo,
-        issuedBy,
-        address,
-        issueDate,
-        attachmentNames,
-        notes,
-        NULL,
-        NULL,
-        NULL,
-        NULL,
-        NULL,
-        NULL,
-        status
-      FROM issue_records_legacy;
-
-      DROP TABLE issue_records_legacy;
-    `);
-
-    db.exec("COMMIT");
-  } catch (error) {
-    db.exec("ROLLBACK");
-    throw error;
-  }
+  missingColumns.forEach((column) => {
+    db.exec(
+      `ALTER TABLE issue_records ADD COLUMN ${column.name} ${column.definition}`
+    );
+  });
 };
 
 const backfillIssueRecordBranchIds = () => {
@@ -756,129 +697,115 @@ const backfillStockLocationBalancesIfNeeded = () => {
 
 const initializeDatabase = () => {
   db.exec(`
-    PRAGMA journal_mode = WAL;
-
     CREATE TABLE IF NOT EXISTS suppliers (
-      supplierId TEXT PRIMARY KEY,
-      name TEXT NOT NULL,
-      contactPerson TEXT NOT NULL,
-      phone TEXT NOT NULL,
-      email TEXT NOT NULL,
-      categoryFocus TEXT NOT NULL,
-      lastDeliveryDate TEXT NOT NULL,
-      activeContracts INTEGER NOT NULL
-    );
+      supplierId VARCHAR(64) PRIMARY KEY,
+      name VARCHAR(255) NOT NULL,
+      contactPerson VARCHAR(255) NOT NULL,
+      phone VARCHAR(64) NOT NULL,
+      email VARCHAR(255) NOT NULL,
+      categoryFocus VARCHAR(255) NOT NULL,
+      lastDeliveryDate VARCHAR(32) NOT NULL,
+      activeContracts INT NOT NULL
+    ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
 
     CREATE TABLE IF NOT EXISTS branches (
-      branchId TEXT PRIMARY KEY,
-      name TEXT NOT NULL UNIQUE,
-      code TEXT NOT NULL UNIQUE,
-      address TEXT NOT NULL,
-      region TEXT NOT NULL,
-      contactPerson TEXT NOT NULL,
-      phone TEXT NOT NULL,
-      status TEXT NOT NULL
-    );
+      branchId VARCHAR(64) PRIMARY KEY,
+      name VARCHAR(255) NOT NULL UNIQUE,
+      code VARCHAR(64) NOT NULL UNIQUE,
+      address VARCHAR(255) NOT NULL,
+      region VARCHAR(128) NOT NULL,
+      contactPerson VARCHAR(255) NOT NULL,
+      phone VARCHAR(64) NOT NULL,
+      status VARCHAR(32) NOT NULL
+    ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
 
     CREATE TABLE IF NOT EXISTS receiving_receipts (
-      receiptId TEXT PRIMARY KEY,
-      receiptType TEXT NOT NULL,
-      supplierId TEXT NOT NULL,
-      supplierName TEXT NOT NULL,
-      arrivalDate TEXT NOT NULL,
-      signedBy TEXT NOT NULL,
-      receivedBy TEXT NOT NULL,
-      itemCount INTEGER NOT NULL,
-      totalQuantity INTEGER NOT NULL,
-      totalAmount REAL NOT NULL,
-      documentCount INTEGER NOT NULL,
-      documentStatus TEXT NOT NULL,
-      status TEXT NOT NULL
-    );
+      receiptId VARCHAR(64) PRIMARY KEY,
+      receiptType VARCHAR(32) NOT NULL,
+      supplierId VARCHAR(64) NOT NULL,
+      supplierName VARCHAR(255) NOT NULL,
+      arrivalDate VARCHAR(32) NOT NULL,
+      signedBy VARCHAR(255) NOT NULL,
+      receivedBy VARCHAR(255) NOT NULL,
+      itemCount INT NOT NULL,
+      totalQuantity INT NOT NULL,
+      totalAmount DOUBLE NOT NULL,
+      documentCount INT NOT NULL,
+      documentStatus VARCHAR(32) NOT NULL,
+      status VARCHAR(32) NOT NULL
+    ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
 
     CREATE TABLE IF NOT EXISTS hq_stock_items (
-      stockId TEXT PRIMARY KEY,
-      itemName TEXT NOT NULL UNIQUE,
-      category TEXT NOT NULL,
-      totalQuantity INTEGER NOT NULL,
-      serializedUnits INTEGER NOT NULL,
-      nonSerializedUnits INTEGER NOT NULL,
-      supplierName TEXT NOT NULL,
-      lastArrivalDate TEXT NOT NULL,
-      storageLocation TEXT NOT NULL,
-      status TEXT NOT NULL
-    );
+      stockId VARCHAR(64) PRIMARY KEY,
+      itemName VARCHAR(255) NOT NULL UNIQUE,
+      category VARCHAR(128) NOT NULL,
+      totalQuantity INT NOT NULL,
+      serializedUnits INT NOT NULL,
+      nonSerializedUnits INT NOT NULL,
+      supplierName VARCHAR(255) NOT NULL,
+      lastArrivalDate VARCHAR(32) NOT NULL,
+      storageLocation VARCHAR(255) NOT NULL,
+      status VARCHAR(32) NOT NULL
+    ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
 
     CREATE TABLE IF NOT EXISTS issue_records (
-      issueId TEXT PRIMARY KEY,
-      itemName TEXT NOT NULL,
-      serialNumber TEXT NOT NULL,
-      destinationType TEXT NOT NULL,
-      branchId TEXT,
-      issuedTo TEXT NOT NULL,
-      issuedBy TEXT NOT NULL,
-      address TEXT NOT NULL,
-      issueDate TEXT NOT NULL,
-      attachmentNames TEXT NOT NULL DEFAULT '[]',
-      notes TEXT,
-      acknowledgedBy TEXT,
-      acknowledgedAt TEXT,
-      acknowledgementNotes TEXT,
-      returnedBy TEXT,
-      returnedAt TEXT,
-      returnNotes TEXT,
-      status TEXT NOT NULL
-    );
+      issueId VARCHAR(64) PRIMARY KEY,
+      itemName VARCHAR(255) NOT NULL,
+      serialNumber VARCHAR(255) NOT NULL,
+      destinationType VARCHAR(32) NOT NULL,
+      branchId VARCHAR(64) NULL,
+      issuedTo VARCHAR(255) NOT NULL,
+      issuedBy VARCHAR(255) NOT NULL,
+      address VARCHAR(255) NOT NULL,
+      issueDate VARCHAR(32) NOT NULL,
+      attachmentNames LONGTEXT NOT NULL,
+      notes TEXT NULL,
+      acknowledgedBy VARCHAR(255) NULL,
+      acknowledgedAt VARCHAR(32) NULL,
+      acknowledgementNotes TEXT NULL,
+      returnedBy VARCHAR(255) NULL,
+      returnedAt VARCHAR(32) NULL,
+      returnNotes TEXT NULL,
+      status VARCHAR(32) NOT NULL
+    ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
 
     CREATE TABLE IF NOT EXISTS attachments (
-      attachmentId TEXT PRIMARY KEY,
-      entityType TEXT NOT NULL,
-      entityId TEXT NOT NULL,
-      originalName TEXT NOT NULL,
-      storedName TEXT NOT NULL,
-      storagePath TEXT NOT NULL,
-      mimeType TEXT NOT NULL,
-      fileSize INTEGER NOT NULL,
-      uploadedAt TEXT NOT NULL
-    );
+      attachmentId VARCHAR(64) PRIMARY KEY,
+      entityType VARCHAR(64) NOT NULL,
+      entityId VARCHAR(64) NOT NULL,
+      originalName VARCHAR(255) NOT NULL,
+      storedName VARCHAR(255) NOT NULL,
+      storagePath VARCHAR(512) NOT NULL,
+      mimeType VARCHAR(128) NOT NULL,
+      fileSize INT NOT NULL,
+      uploadedAt VARCHAR(32) NOT NULL
+    ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
 
     CREATE TABLE IF NOT EXISTS hq_serial_assets (
-      assetId TEXT PRIMARY KEY,
-      stockId TEXT NOT NULL,
-      itemName TEXT NOT NULL,
-      serialNumber TEXT NOT NULL UNIQUE,
-      supplierName TEXT NOT NULL,
-      lastArrivalDate TEXT NOT NULL,
-      storageLocation TEXT NOT NULL,
-      status TEXT NOT NULL,
-      issueId TEXT
-    );
+      assetId VARCHAR(64) PRIMARY KEY,
+      stockId VARCHAR(64) NOT NULL,
+      itemName VARCHAR(255) NOT NULL,
+      serialNumber VARCHAR(255) NOT NULL UNIQUE,
+      supplierName VARCHAR(255) NOT NULL,
+      lastArrivalDate VARCHAR(32) NOT NULL,
+      storageLocation VARCHAR(255) NOT NULL,
+      status VARCHAR(32) NOT NULL,
+      issueId VARCHAR(64) NULL
+    ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
 
     CREATE TABLE IF NOT EXISTS stock_movements (
-      movementId TEXT PRIMARY KEY,
-      movementType TEXT NOT NULL,
-      stockId TEXT NOT NULL,
-      itemName TEXT NOT NULL,
-      quantityDelta INTEGER NOT NULL,
-      movementDate TEXT NOT NULL,
-      referenceType TEXT NOT NULL,
-      referenceId TEXT NOT NULL,
-      storageLocation TEXT,
-      serialNumbers TEXT,
-      notes TEXT
-    );
-
-    CREATE INDEX IF NOT EXISTS idx_hq_serial_assets_item_status
-    ON hq_serial_assets (itemName, status);
-
-    CREATE INDEX IF NOT EXISTS idx_attachments_entity
-    ON attachments (entityType, entityId);
-
-    CREATE INDEX IF NOT EXISTS idx_stock_movements_reference
-    ON stock_movements (referenceType, referenceId);
-
-    CREATE INDEX IF NOT EXISTS idx_stock_movements_stock_date
-    ON stock_movements (stockId, movementDate);
+      movementId VARCHAR(64) PRIMARY KEY,
+      movementType VARCHAR(64) NOT NULL,
+      stockId VARCHAR(64) NOT NULL,
+      itemName VARCHAR(255) NOT NULL,
+      quantityDelta INT NOT NULL,
+      movementDate VARCHAR(32) NOT NULL,
+      referenceType VARCHAR(64) NOT NULL,
+      referenceId VARCHAR(64) NOT NULL,
+      storageLocation VARCHAR(255) NULL,
+      serialNumbers LONGTEXT NULL,
+      notes TEXT NULL
+    ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci
   `);
 
   ensureStockLocationBalanceSchema(db);
@@ -893,17 +820,34 @@ const initializeDatabase = () => {
   ) {
     db.exec(`
       ALTER TABLE stock_movements
-      ADD COLUMN storageLocation TEXT
+      ADD COLUMN storageLocation VARCHAR(255)
     `);
   }
 
-  db.exec(`
-    CREATE INDEX IF NOT EXISTS idx_issue_records_status
-    ON issue_records (status, issueDate);
-
-    CREATE INDEX IF NOT EXISTS idx_issue_records_branch
-    ON issue_records (branchId, destinationType);
-  `);
+  ensureIndex("hq_serial_assets", "idx_hq_serial_assets_item_status", [
+    "itemName",
+    "status",
+  ]);
+  ensureIndex("attachments", "idx_attachments_entity", [
+    "entityType",
+    "entityId",
+  ]);
+  ensureIndex("stock_movements", "idx_stock_movements_reference", [
+    "referenceType",
+    "referenceId",
+  ]);
+  ensureIndex("stock_movements", "idx_stock_movements_stock_date", [
+    "stockId",
+    "movementDate",
+  ]);
+  ensureIndex("issue_records", "idx_issue_records_status", [
+    "status",
+    "issueDate",
+  ]);
+  ensureIndex("issue_records", "idx_issue_records_branch", [
+    "branchId",
+    "destinationType",
+  ]);
 
   const supplierCount =
     db.prepare("SELECT COUNT(*) AS count FROM suppliers").get().count || 0;
@@ -1432,12 +1376,11 @@ export const createIssueRecordData = (
   newIssueRecord: NewIssueRecord,
   uploadedAttachments: UploadedIssueAttachment[] = []
 ): IssueRecord => {
-  const highestIssueSequence =
-    db
-      .prepare(
-        "SELECT MAX(CAST(SUBSTR(issueId, 10) AS INTEGER)) AS sequence FROM issue_records"
-      )
-      .get().sequence || 0;
+  const highestIssueSequence = db.getNumericSuffixSequence(
+    "issue_records",
+    "issueId",
+    10
+  );
   const issueId = `ISS-${new Date().getFullYear()}-${String(
     highestIssueSequence + 1
   ).padStart(3, "0")}`;
