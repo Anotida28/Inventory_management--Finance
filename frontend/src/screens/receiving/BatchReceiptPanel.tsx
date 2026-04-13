@@ -1,5 +1,6 @@
 "use client";
 
+import { getBusinessTodayDate } from "@/utils/date";
 import {
   useCreateReceivingReceiptMutation,
   useGetReceivingOptionsQuery,
@@ -29,7 +30,7 @@ const inputClassName =
 
 const createInitialFormState = (): BatchReceiptFormState => ({
   supplierId: "",
-  arrivalDate: new Date().toISOString().split("T")[0],
+  arrivalDate: getBusinessTodayDate(),
   signedBy: "",
   receivedBy: "",
   documentStatus: "Pending Review",

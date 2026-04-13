@@ -159,11 +159,12 @@ const createIssueRecord = (req, res) => __awaiter(void 0, void 0, void 0, functi
     const issueRequest = req;
     const uploadedFiles = Array.isArray(issueRequest.files) ? issueRequest.files : [];
     try {
-        const { itemName, serialNumber, destinationType, issuedTo, issuedBy, address, issueDate, attachmentNames, notes, } = req.body;
+        const { itemName, serialNumber, destinationType, branchId, issuedTo, issuedBy, address, issueDate, attachmentNames, notes, } = req.body;
         const createdRecord = (0, operationsData_1.createIssueRecordData)({
             itemName,
             serialNumber,
             destinationType,
+            branchId,
             issuedTo,
             issuedBy,
             address,
@@ -241,6 +242,14 @@ const returnIssueRecord = (req, res) => __awaiter(void 0, void 0, void 0, functi
             return;
         }
         if (message === "Issue record has already been returned") {
+            res.status(409).json({ message });
+            return;
+        }
+        if (message === "HQ stock item was not found for this return" ||
+            message === "Serial asset was not found for this issue" ||
+            message === "Serial asset is not currently issued" ||
+            message === "Serial asset is linked to a different issue" ||
+            message === "Serial asset is linked to the wrong HQ stock item") {
             res.status(409).json({ message });
             return;
         }

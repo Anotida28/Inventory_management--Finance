@@ -6,6 +6,7 @@ Object.defineProperty(exports, "__esModule", { value: true });
 exports.createReceivingReceiptData = exports.getOperationAttachmentByIdData = exports.getReceivingReceiptByIdData = exports.getReceivingReceiptsWithAttachmentsData = exports.getReceivingOptionsData = void 0;
 const fs_1 = __importDefault(require("fs"));
 const path_1 = __importDefault(require("path"));
+const stockLocationBalances_1 = require("./stockLocationBalances");
 const { DatabaseSync } = require("node:sqlite");
 const stockLocationSeeds = [
     { locationId: "LOC-001", locationName: "HQ Cage A1" },
@@ -22,6 +23,11 @@ const resolvedDatabasePath = path_1.default.isAbsolute(configuredDatabasePath)
     : path_1.default.join(process.cwd(), configuredDatabasePath);
 fs_1.default.mkdirSync(path_1.default.dirname(resolvedDatabasePath), { recursive: true });
 const db = new DatabaseSync(resolvedDatabasePath);
+const getTableColumns = (tableName) => {
+    return db
+        .prepare(`PRAGMA table_info(${tableName})`)
+        .all().map((column) => column.name);
+};
 const parseJsonArray = (value) => {
     if (!value)
         return [];
@@ -83,6 +89,7 @@ const ensureExtendedReceivingSchema = () => {
       movementDate TEXT NOT NULL,
       referenceType TEXT NOT NULL,
       referenceId TEXT NOT NULL,
+      storageLocation TEXT,
       serialNumbers TEXT,
       notes TEXT
     );
@@ -93,6 +100,15 @@ const ensureExtendedReceivingSchema = () => {
     CREATE INDEX IF NOT EXISTS idx_stock_movements_reference
     ON stock_movements (referenceType, referenceId);
   `);
+    (0, stockLocationBalances_1.ensureStockLocationBalanceSchema)(db);
+    const stockMovementColumns = getTableColumns("stock_movements");
+    if (stockMovementColumns.length > 0 &&
+        !stockMovementColumns.includes("storageLocation")) {
+        db.exec(`
+      ALTER TABLE stock_movements
+      ADD COLUMN storageLocation TEXT
+    `);
+    }
     const stockLocationCount = db.prepare("SELECT COUNT(*) AS count FROM stock_locations").get().count || 0;
     if (stockLocationCount === 0) {
         const insertLocation = db.prepare(`
@@ -285,14 +301,27 @@ const getReceivingOptionsData = () => {
     const knownItems = db
         .prepare(`
           SELECT
+            stockId,
             itemName,
             category,
-            storageLocation AS defaultStorageLocation,
+            storageLocation,
             supplierName
           FROM hq_stock_items
           ORDER BY itemName ASC
         `)
-        .all().map((item) => (Object.assign(Object.assign({}, item), { isSerialized: isSerializedItemInStock(item.itemName) })));
+        .all();
+    const stockLocationBalancesByStockId = (0, stockLocationBalances_1.getStockLocationBalancesByStockIds)(db, knownItems.map((item) => item.stockId));
+    const resolvedKnownItems = knownItems.map((item) => {
+        var _a, _b;
+        const locationBalances = (_a = stockLocationBalancesByStockId.get(item.stockId)) !== null && _a !== void 0 ? _a : [];
+        return {
+            itemName: item.itemName,
+            category: item.category,
+            defaultStorageLocation: (_b = (0, stockLocationBalances_1.getPrimaryStorageLocation)(locationBalances)) !== null && _b !== void 0 ? _b : item.storageLocation,
+            supplierName: item.supplierName,
+            isSerialized: isSerializedItemInStock(item.itemName),
+        };
+    });
     const receivedBySuggestions = db
         .prepare(`
           SELECT DISTINCT receivedBy
@@ -310,7 +339,7 @@ const getReceivingOptionsData = () => {
     return {
         suppliers,
         stockLocations,
-        knownItems,
+        knownItems: resolvedKnownItems,
         receivedBySuggestions,
         signedBySuggestions,
     };
@@ -655,9 +684,10 @@ const createReceivingReceiptData = (newReceipt, uploadedAttachments = []) => {
           movementDate,
           referenceType,
           referenceId,
+          storageLocation,
           serialNumbers,
           notes
-        ) VALUES (?, 'Receipt', ?, ?, ?, ?, 'receiving_receipt', ?, ?, ?)
+        ) VALUES (?, 'Receipt', ?, ?, ?, ?, 'receiving_receipt', ?, ?, ?, ?)
       `);
         normalizedLines.forEach((line) => {
             var _a;
@@ -709,6 +739,14 @@ const createReceivingReceiptData = (newReceipt, uploadedAttachments = []) => {
                     insertSerialAsset.run(assetId, stockId, line.itemName, serialNumber, supplier.name, arrivalDate, line.storageLocation, null);
                 });
             }
+            (0, stockLocationBalances_1.adjustStockLocationBalance)(db, {
+                stockId,
+                storageLocation: line.storageLocation,
+                quantityDelta: line.quantity,
+                serializedDelta: line.isSerialized ? line.quantity : 0,
+                nonSerializedDelta: line.isSerialized ? 0 : line.quantity,
+                movementDate: arrivalDate,
+            });
             const availableSerialCount = getAvailableSerialCountByStockId(stockId);
             const nonSerializedUnits = Math.max(nextTotalQuantity - availableSerialCount, 0);
             const nextStatus = nextTotalQuantity <= 5 ? "Low Stock" : "Available";
@@ -721,11 +759,10 @@ const createReceivingReceiptData = (newReceipt, uploadedAttachments = []) => {
             nonSerializedUnits = ?,
             supplierName = ?,
             lastArrivalDate = ?,
-            storageLocation = ?,
             status = ?
           WHERE stockId = ?
-        `).run(line.category, nextTotalQuantity, availableSerialCount, nonSerializedUnits, supplier.name, arrivalDate, line.storageLocation, nextStatus, stockId);
-            insertStockMovement.run(`${createdReceipt.receiptId}-MOVE-${String(line.lineNumber).padStart(3, "0")}`, stockId, line.itemName, line.quantity, arrivalDate, createdReceipt.receiptId, line.serialNumbers.length > 0 ? JSON.stringify(line.serialNumbers) : null, `Receipt line ${line.lineNumber}`);
+        `).run(line.category, nextTotalQuantity, availableSerialCount, nonSerializedUnits, supplier.name, arrivalDate, nextStatus, stockId);
+            insertStockMovement.run(`${createdReceipt.receiptId}-MOVE-${String(line.lineNumber).padStart(3, "0")}`, stockId, line.itemName, line.quantity, arrivalDate, createdReceipt.receiptId, line.storageLocation, line.serialNumbers.length > 0 ? JSON.stringify(line.serialNumbers) : null, `Receipt line ${line.lineNumber}`);
             createdReceipt.lines.push({
                 lineId,
                 receiptId: createdReceipt.receiptId,

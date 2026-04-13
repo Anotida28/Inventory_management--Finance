@@ -86,7 +86,7 @@ const Inventory = () => {
   );
   const lowStockItems = stock.filter((item) => item.status === "Low Stock").length;
   const storageLocationCount = new Set(
-    stock.map((item) => item.storageLocation)
+    stock.flatMap((item) => item.storageLocations)
   ).size;
   const categoryOptions = Array.from(new Set(stock.map((item) => item.category))).sort();
 
@@ -96,7 +96,10 @@ const Inventory = () => {
       !normalizedSearch ||
       item.itemName.toLowerCase().includes(normalizedSearch) ||
       item.supplierName.toLowerCase().includes(normalizedSearch) ||
-      item.storageLocation.toLowerCase().includes(normalizedSearch);
+      item.storageLocation.toLowerCase().includes(normalizedSearch) ||
+      item.storageLocations.some((location) =>
+        location.toLowerCase().includes(normalizedSearch)
+      );
     const matchesStatus = statusFilter === "All" || item.status === statusFilter;
     const matchesCategory =
       categoryFilter === "All" || item.category === categoryFilter;
@@ -227,9 +230,15 @@ const Inventory = () => {
                   </p>
                 </div>
                 <div>
-                  <p className="text-gray-500">Storage</p>
+                  <p className="text-gray-500">Storage Summary</p>
                   <p className="font-medium text-gray-700 mt-1">
                     {selectedStock.storageLocation}
+                  </p>
+                </div>
+                <div>
+                  <p className="text-gray-500">Locations</p>
+                  <p className="font-medium text-gray-700 mt-1">
+                    {selectedStock.locationCount}
                   </p>
                 </div>
                 <div>
@@ -272,6 +281,55 @@ const Inventory = () => {
 
           <div className="bg-white shadow rounded-2xl border border-gray-100 p-5">
             <h3 className="text-base font-semibold text-gray-700">
+              Location Breakdown
+            </h3>
+            <div className="mt-4 space-y-3">
+              {selectedStock?.locationBalances.length ? (
+                selectedStock.locationBalances.map((locationBalance) => (
+                  <div
+                    key={locationBalance.balanceId}
+                    className="border border-gray-100 rounded-xl p-3"
+                  >
+                    <div className="flex items-center justify-between gap-3">
+                      <span className="text-sm font-medium text-gray-700">
+                        {locationBalance.storageLocation}
+                      </span>
+                      <span className="text-sm font-semibold text-gray-800">
+                        {locationBalance.totalQuantity} units
+                      </span>
+                    </div>
+                    <div className="mt-3 grid grid-cols-3 gap-3 text-sm">
+                      <div>
+                        <p className="text-gray-500">Serialized</p>
+                        <p className="font-medium text-gray-700 mt-1">
+                          {locationBalance.serializedUnits}
+                        </p>
+                      </div>
+                      <div>
+                        <p className="text-gray-500">Bulk Units</p>
+                        <p className="font-medium text-gray-700 mt-1">
+                          {locationBalance.nonSerializedUnits}
+                        </p>
+                      </div>
+                      <div>
+                        <p className="text-gray-500">Last Movement</p>
+                        <p className="font-medium text-gray-700 mt-1">
+                          {locationBalance.lastMovementDate}
+                        </p>
+                      </div>
+                    </div>
+                  </div>
+                ))
+              ) : (
+                <p className="text-sm text-gray-500">
+                  No location balances are recorded for this stock item yet.
+                </p>
+              )}
+            </div>
+          </div>
+
+          <div className="bg-white shadow rounded-2xl border border-gray-100 p-5">
+            <h3 className="text-base font-semibold text-gray-700">
               Recent Stock Movements
             </h3>
             <div className="mt-4 space-y-3">
@@ -309,6 +367,11 @@ const Inventory = () => {
                     <p className="text-xs text-gray-400 mt-1">
                       {movement.movementDate}
                     </p>
+                    {movement.storageLocation && (
+                      <p className="text-xs text-gray-500 mt-1">
+                        Location: {movement.storageLocation}
+                      </p>
+                    )}
                     {movement.serialNumbers.length > 0 && (
                       <p className="text-xs text-gray-500 mt-2 truncate">
                         Serials: {movement.serialNumbers.join(", ")}

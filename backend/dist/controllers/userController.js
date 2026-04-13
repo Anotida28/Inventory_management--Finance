@@ -10,10 +10,10 @@ var __awaiter = (this && this.__awaiter) || function (thisArg, _arguments, P, ge
 };
 Object.defineProperty(exports, "__esModule", { value: true });
 exports.getUsers = void 0;
-const fileData_1 = require("../lib/fileData");
+const usersData_1 = require("../lib/usersData");
 const getUsers = (req, res) => __awaiter(void 0, void 0, void 0, function* () {
     try {
-        res.json((0, fileData_1.getUsersData)());
+        res.json((0, usersData_1.getUsersData)());
     }
     catch (error) {
         res.status(500).json({ message: "Error retrieving users" });

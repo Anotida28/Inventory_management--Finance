@@ -6,7 +6,8 @@
     "dev": "next dev",
     "build": "next build",
     "start": "next start",
-    "lint": "next lint"
+    "lint": "next lint",
+    "typecheck": "tsc -p tsconfig.typecheck.json --noEmit"
   },
   "dependencies": {
     "@emotion/react": "^11.11.4",
@@ -22,7 +23,6 @@
     "react": "^18",
     "react-dom": "^18",
     "react-redux": "^9.1.2",
-    "recharts": "^2.12.7",
     "redux-persist": "^6.0.0",
     "uuid": "^10.0.0"
   },

@@ -1,6 +1,15 @@
 import fs from "fs";
 import path from "path";
+import { getBusinessTodayDate } from "./date";
 import { UploadedIssueAttachment } from "./issueUploads";
+import {
+  adjustStockLocationBalance,
+  ensureStockLocationBalanceSchema,
+  getStockLocationBalancesByStockId,
+  getStockLocationBalancesByStockIds,
+  getStorageLocationSummary,
+  type StockLocationBalance,
+} from "./stockLocationBalances";
 
 const { DatabaseSync } = require("node:sqlite") as {
   DatabaseSync: new (path: string) => any;
@@ -54,6 +63,8 @@ type HqStockItem = {
   supplierName: string;
   lastArrivalDate: string;
   storageLocation: string;
+  locationCount: number;
+  storageLocations: string[];
   status: "Available" | "Reserved" | "Low Stock";
 };
 
@@ -66,6 +77,7 @@ type StockMovementRecord = {
   movementDate: string;
   referenceType: string;
   referenceId: string;
+  storageLocation?: string;
   serialNumbers: string[];
   notes?: string;
 };
@@ -73,6 +85,7 @@ type StockMovementRecord = {
 type HqStockItemDetail = HqStockItem & {
   availableSerialCount: number;
   issuedSerialCount: number;
+  locationBalances: StockLocationBalance[];
   recentMovements: StockMovementRecord[];
   availableSerialAssets: SerialAsset[];
 };
@@ -185,12 +198,6 @@ type DocumentQueueEntry = {
   reason: string;
 };
 
-type SerialSeedTemplate = {
-  prefix: string;
-  start: number;
-  padding: number;
-};
-
 const supplierSeeds: Supplier[] = [
   {
     supplierId: "SUP-001",
@@ -287,216 +294,6 @@ const branchSeeds: Branch[] = [
   },
 ];
 
-const receivingReceiptSeeds: ReceivingReceipt[] = [
-  {
-    receiptId: "RCV-2026-004",
-    receiptType: "Batch",
-    supplierId: "SUP-001",
-    supplierName: "Zim Office Tech",
-    arrivalDate: "2026-04-03",
-    signedBy: "L. Dlamini",
-    receivedBy: "Procurement Desk",
-    itemCount: 4,
-    totalQuantity: 26,
-    totalAmount: 18450,
-    documentCount: 3,
-    documentStatus: "Complete",
-    status: "Verified",
-  },
-  {
-    receiptId: "RCV-2026-003",
-    receiptType: "Single Item",
-    supplierId: "SUP-004",
-    supplierName: "Prime Devices Africa",
-    arrivalDate: "2026-04-01",
-    signedBy: "S. Mupfumi",
-    receivedBy: "Stores Officer",
-    itemCount: 1,
-    totalQuantity: 1,
-    totalAmount: 920,
-    documentCount: 2,
-    documentStatus: "Pending Review",
-    status: "Pending Review",
-  },
-  {
-    receiptId: "RCV-2026-002",
-    receiptType: "Batch",
-    supplierId: "SUP-002",
-    supplierName: "SecureNet Distribution",
-    arrivalDate: "2026-03-28",
-    signedBy: "P. Chuma",
-    receivedBy: "Procurement Desk",
-    itemCount: 3,
-    totalQuantity: 18,
-    totalAmount: 12680,
-    documentCount: 1,
-    documentStatus: "Pending Review",
-    status: "Logged",
-  },
-  {
-    receiptId: "RCV-2026-001",
-    receiptType: "Single Item",
-    supplierId: "SUP-003",
-    supplierName: "Office Source Wholesale",
-    arrivalDate: "2026-03-19",
-    signedBy: "T. Moyo",
-    receivedBy: "Stores Officer",
-    itemCount: 1,
-    totalQuantity: 1,
-    totalAmount: 640,
-    documentCount: 0,
-    documentStatus: "Missing",
-    status: "Pending Review",
-  },
-];
-
-const hqStockSeeds: HqStockItem[] = [
-  {
-    stockId: "STK-001",
-    itemName: "Lenovo ThinkPad E14",
-    category: "Laptop",
-    totalQuantity: 12,
-    serializedUnits: 12,
-    nonSerializedUnits: 0,
-    supplierName: "Zim Office Tech",
-    lastArrivalDate: "2026-04-03",
-    storageLocation: "HQ Cage A1",
-    status: "Available",
-  },
-  {
-    stockId: "STK-002",
-    itemName: "MikroTik Router RB4011",
-    category: "Network",
-    totalQuantity: 6,
-    serializedUnits: 6,
-    nonSerializedUnits: 0,
-    supplierName: "SecureNet Distribution",
-    lastArrivalDate: "2026-03-28",
-    storageLocation: "HQ Cage B2",
-    status: "Available",
-  },
-  {
-    stockId: "STK-003",
-    itemName: 'HP 24" Monitor',
-    category: "Monitor",
-    totalQuantity: 20,
-    serializedUnits: 0,
-    nonSerializedUnits: 20,
-    supplierName: "Zim Office Tech",
-    lastArrivalDate: "2026-04-03",
-    storageLocation: "HQ Rack C4",
-    status: "Reserved",
-  },
-  {
-    stockId: "STK-004",
-    itemName: "Visitor Access Tablets",
-    category: "Tablet",
-    totalQuantity: 3,
-    serializedUnits: 3,
-    nonSerializedUnits: 0,
-    supplierName: "Prime Devices Africa",
-    lastArrivalDate: "2026-04-01",
-    storageLocation: "HQ Cage A3",
-    status: "Available",
-  },
-  {
-    stockId: "STK-005",
-    itemName: "Receipt Folders",
-    category: "Stationery",
-    totalQuantity: 40,
-    serializedUnits: 0,
-    nonSerializedUnits: 40,
-    supplierName: "Office Source Wholesale",
-    lastArrivalDate: "2026-03-19",
-    storageLocation: "HQ Rack D1",
-    status: "Low Stock",
-  },
-];
-
-const issueRecordSeeds: IssueRecord[] = [
-  {
-    issueId: "ISS-2026-007",
-    itemName: "Lenovo ThinkPad E14",
-    serialNumber: "LNV-E14-240041",
-    destinationType: "Branch",
-    branchId: "BR-002",
-    issuedTo: "Bulawayo Branch",
-    issuedBy: "L. Dlamini",
-    address: "12 Jason Moyo Road, Bulawayo",
-    issueDate: "2026-04-05",
-    attachmentNames: ["signed-dispatch-note.pdf", "vehicle-log.jpg"],
-    attachments: [],
-    notes: "Issued for new branch onboarding team.",
-    status: "Issued",
-  },
-  {
-    issueId: "ISS-2026-006",
-    itemName: "MikroTik Router RB4011",
-    serialNumber: "MKT-RB4011-7782",
-    destinationType: "Branch",
-    branchId: "BR-003",
-    issuedTo: "Mutare Branch",
-    issuedBy: "P. Chuma",
-    address: "16 Herbert Chitepo Street, Mutare",
-    issueDate: "2026-04-04",
-    attachmentNames: ["router-issue-form.pdf"],
-    attachments: [],
-    notes: "Replacement router for branch connectivity upgrade.",
-    acknowledgedBy: "B. Nyoni",
-    acknowledgedAt: "2026-04-05",
-    acknowledgementNotes: "Installed and confirmed by branch IT desk.",
-    status: "Acknowledged",
-  },
-  {
-    issueId: "ISS-2026-005",
-    itemName: "Visitor Access Tablets",
-    serialNumber: "VAT-TAB-1020",
-    destinationType: "Person",
-    issuedTo: "K. Mpofu",
-    issuedBy: "S. Mupfumi",
-    address: "OMDS Gweru Branch, Main Reception",
-    issueDate: "2026-04-02",
-    attachmentNames: [],
-    attachments: [],
-    notes: "Assigned to branch receptionist for visitor sign-in.",
-    acknowledgedBy: "K. Mpofu",
-    acknowledgedAt: "2026-04-02",
-    status: "Acknowledged",
-  },
-  {
-    issueId: "ISS-2026-004",
-    itemName: 'HP 24" Monitor',
-    serialNumber: "MON-HP24-3308",
-    destinationType: "Person",
-    issuedTo: "R. Dube",
-    issuedBy: "L. Dlamini",
-    address: "OMDS HQ Finance Office",
-    issueDate: "2026-04-06",
-    attachmentNames: ["desk-allocation-note.pdf"],
-    attachments: [],
-    notes: "Temporary workstation allocation at HQ.",
-    status: "Issued",
-  },
-];
-
-const serialSeedTemplates: Record<string, SerialSeedTemplate> = {
-  "Lenovo ThinkPad E14": {
-    prefix: "LNV-E14-",
-    start: 240101,
-    padding: 6,
-  },
-  "MikroTik Router RB4011": {
-    prefix: "MKT-RB4011-",
-    start: 7801,
-    padding: 4,
-  },
-  "Visitor Access Tablets": {
-    prefix: "VAT-TAB-",
-    start: 1101,
-    padding: 4,
-  },
-};
-
 const configuredDatabasePath =
   process.env.OPERATIONS_DB_PATH || "./data/operations.sqlite";
 const resolvedDatabasePath = path.isAbsolute(configuredDatabasePath)
@@ -526,7 +323,7 @@ const normalizeOptionalString = (value: unknown) => {
   return trimmedValue ? trimmedValue : undefined;
 };
 
-const getTodayDate = () => new Date().toISOString().split("T")[0];
+const getTodayDate = () => getBusinessTodayDate();
 
 const mapIssueRecord = (row: any): IssueRecord => ({
   issueId: row.issueId,
@@ -571,6 +368,7 @@ const mapStockMovement = (row: any): StockMovementRecord => ({
   movementDate: row.movementDate,
   referenceType: row.referenceType,
   referenceId: row.referenceId,
+  storageLocation: normalizeOptionalString(row.storageLocation),
   serialNumbers: parseAttachmentNames(row.serialNumbers),
   notes: row.notes ?? undefined,
 });
@@ -593,23 +391,15 @@ const mapIssueAttachment = (row: any): IssueAttachment => ({
   }/download`,
 });
 
-const buildSeedSerialNumber = (itemName: string, index: number) => {
-  const template = serialSeedTemplates[itemName];
-
-  if (template) {
-    return `${template.prefix}${String(template.start + index).padStart(
-      template.padding,
-      "0"
-    )}`;
+const getHqStockStatus = (
+  currentStatus: HqStockItem["status"],
+  nextTotalQuantity: number
+): HqStockItem["status"] => {
+  if (currentStatus === "Reserved") {
+    return "Reserved";
   }
 
-  const compactItemName = itemName
-    .toUpperCase()
-    .replace(/[^A-Z0-9]+/g, "-")
-    .replace(/^-+|-+$/g, "")
-    .slice(0, 12);
-
-  return `SER-${compactItemName}-${String(index + 1).padStart(4, "0")}`;
+  return nextTotalQuantity <= 5 ? "Low Stock" : "Available";
 };
 
 const getTableColumns = (tableName: string) => {
@@ -745,6 +535,214 @@ const backfillIssueRecordBranchIds = () => {
   });
 };
 
+const backfillStockLocationBalancesIfNeeded = () => {
+  const balanceCount =
+    (
+      db
+        .prepare("SELECT COUNT(*) AS count FROM hq_stock_location_balances")
+        .get() as { count: number }
+    ).count || 0;
+  const stockCount =
+    (
+      db.prepare("SELECT COUNT(*) AS count FROM hq_stock_items").get() as {
+        count: number;
+      }
+    ).count || 0;
+
+  if (balanceCount > 0 || stockCount === 0) {
+    return;
+  }
+
+  const stockItems = db
+    .prepare(
+      `
+        SELECT
+          stockId,
+          totalQuantity,
+          storageLocation
+        FROM hq_stock_items
+      `
+    )
+    .all() as Array<{
+    stockId: string;
+    totalQuantity: number;
+    storageLocation: string;
+  }>;
+  const serializedByLocation = (
+    db
+      .prepare(
+        `
+          SELECT
+            stockId,
+            storageLocation,
+            COUNT(*) AS count
+          FROM hq_serial_assets
+          WHERE status = 'Available'
+          GROUP BY stockId, storageLocation
+        `
+      )
+      .all() as Array<{
+      stockId: string;
+      storageLocation: string;
+      count: number;
+    }>
+  ).reduce((accumulator, row) => {
+    const key = `${row.stockId}::${row.storageLocation}`;
+
+    accumulator.set(key, {
+      storageLocation: row.storageLocation,
+      serializedUnits: row.count,
+      nonSerializedUnits: 0,
+    });
+
+    return accumulator;
+  }, new Map<string, { storageLocation: string; serializedUnits: number; nonSerializedUnits: number }>());
+  const receiptLineColumns = getTableColumns("receiving_receipt_lines");
+  const nonSerializedByStockId = new Map<
+    string,
+    Map<string, { storageLocation: string; nonSerializedUnits: number }>
+  >();
+
+  if (receiptLineColumns.length > 0) {
+    const nonSerializedReceiptRows = db
+      .prepare(
+        `
+          SELECT
+            stock.stockId,
+            lines.storageLocation,
+            SUM(lines.quantity) AS quantity
+          FROM receiving_receipt_lines AS lines
+          INNER JOIN hq_stock_items AS stock
+            ON stock.itemName = lines.itemName
+          WHERE lines.isSerialized = 0
+          GROUP BY stock.stockId, lines.storageLocation
+        `
+      )
+      .all() as Array<{
+      stockId: string;
+      storageLocation: string;
+      quantity: number;
+    }>;
+
+    nonSerializedReceiptRows.forEach((row) => {
+      const stockLocations =
+        nonSerializedByStockId.get(row.stockId) ??
+        new Map<string, { storageLocation: string; nonSerializedUnits: number }>();
+
+      stockLocations.set(row.storageLocation, {
+        storageLocation: row.storageLocation,
+        nonSerializedUnits: row.quantity,
+      });
+      nonSerializedByStockId.set(row.stockId, stockLocations);
+    });
+  }
+
+  db.exec("BEGIN");
+
+  try {
+    stockItems.forEach((stockItem) => {
+      const locationEntries = new Map<
+        string,
+        {
+          storageLocation: string;
+          serializedUnits: number;
+          nonSerializedUnits: number;
+        }
+      >();
+
+      Array.from(serializedByLocation.entries())
+        .filter(([key]) => key.startsWith(`${stockItem.stockId}::`))
+        .forEach(([, value]) => {
+          locationEntries.set(value.storageLocation, { ...value });
+        });
+
+      const nonSerializedLocations = nonSerializedByStockId.get(stockItem.stockId);
+      const availableSerializedUnits = Array.from(locationEntries.values()).reduce(
+        (sum, entry) => sum + entry.serializedUnits,
+        0
+      );
+      const expectedNonSerializedUnits = Math.max(
+        stockItem.totalQuantity - availableSerializedUnits,
+        0
+      );
+
+      if (nonSerializedLocations && nonSerializedLocations.size > 0) {
+        const fromReceipts = Array.from(nonSerializedLocations.values()).reduce(
+          (sum, entry) => sum + entry.nonSerializedUnits,
+          0
+        );
+
+        if (fromReceipts <= expectedNonSerializedUnits) {
+          nonSerializedLocations.forEach((entry) => {
+            const existingEntry = locationEntries.get(entry.storageLocation);
+
+            locationEntries.set(entry.storageLocation, {
+              storageLocation: entry.storageLocation,
+              serializedUnits: existingEntry?.serializedUnits ?? 0,
+              nonSerializedUnits:
+                (existingEntry?.nonSerializedUnits ?? 0) + entry.nonSerializedUnits,
+            });
+          });
+
+          const remainder = expectedNonSerializedUnits - fromReceipts;
+
+          if (remainder > 0) {
+            const fallbackLocation = stockItem.storageLocation || "Unassigned";
+            const existingEntry = locationEntries.get(fallbackLocation);
+
+            locationEntries.set(fallbackLocation, {
+              storageLocation: fallbackLocation,
+              serializedUnits: existingEntry?.serializedUnits ?? 0,
+              nonSerializedUnits:
+                (existingEntry?.nonSerializedUnits ?? 0) + remainder,
+            });
+          }
+        } else {
+          const fallbackLocation = stockItem.storageLocation || "Unassigned";
+          const existingEntry = locationEntries.get(fallbackLocation);
+
+          locationEntries.set(fallbackLocation, {
+            storageLocation: fallbackLocation,
+            serializedUnits: existingEntry?.serializedUnits ?? 0,
+            nonSerializedUnits:
+              (existingEntry?.nonSerializedUnits ?? 0) + expectedNonSerializedUnits,
+          });
+        }
+      } else if (expectedNonSerializedUnits > 0) {
+        const fallbackLocation = stockItem.storageLocation || "Unassigned";
+        const existingEntry = locationEntries.get(fallbackLocation);
+
+        locationEntries.set(fallbackLocation, {
+          storageLocation: fallbackLocation,
+          serializedUnits: existingEntry?.serializedUnits ?? 0,
+          nonSerializedUnits:
+            (existingEntry?.nonSerializedUnits ?? 0) + expectedNonSerializedUnits,
+        });
+      }
+
+      Array.from(locationEntries.values())
+        .filter(
+          (entry) => entry.serializedUnits > 0 || entry.nonSerializedUnits > 0
+        )
+        .forEach((entry) => {
+          adjustStockLocationBalance(db, {
+            stockId: stockItem.stockId,
+            storageLocation: entry.storageLocation,
+            quantityDelta: entry.serializedUnits + entry.nonSerializedUnits,
+            serializedDelta: entry.serializedUnits,
+            nonSerializedDelta: entry.nonSerializedUnits,
+            movementDate: getTodayDate(),
+          });
+        });
+    });
+
+    db.exec("COMMIT");
+  } catch (error) {
+    db.exec("ROLLBACK");
+    throw error;
+  }
+};
+
 const initializeDatabase = () => {
   db.exec(`
     PRAGMA journal_mode = WAL;
@@ -854,6 +852,7 @@ const initializeDatabase = () => {
       movementDate TEXT NOT NULL,
       referenceType TEXT NOT NULL,
       referenceId TEXT NOT NULL,
+      storageLocation TEXT,
       serialNumbers TEXT,
       notes TEXT
     );
@@ -871,7 +870,21 @@ const initializeDatabase = () => {
     ON stock_movements (stockId, movementDate);
   `);
 
+  ensureStockLocationBalanceSchema(db);
+
   migrateIssueRecordsTableIfNeeded();
+
+  const stockMovementColumns = getTableColumns("stock_movements");
+
+  if (
+    stockMovementColumns.length > 0 &&
+    !stockMovementColumns.includes("storageLocation")
+  ) {
+    db.exec(`
+      ALTER TABLE stock_movements
+      ADD COLUMN storageLocation TEXT
+    `);
+  }
 
   db.exec(`
     CREATE INDEX IF NOT EXISTS idx_issue_records_status
@@ -885,16 +898,6 @@ const initializeDatabase = () => {
     db.prepare("SELECT COUNT(*) AS count FROM suppliers").get().count || 0;
   const branchCount =
     db.prepare("SELECT COUNT(*) AS count FROM branches").get().count || 0;
-  const receiptCount =
-    db.prepare("SELECT COUNT(*) AS count FROM receiving_receipts").get().count ||
-    0;
-  const stockCount =
-    db.prepare("SELECT COUNT(*) AS count FROM hq_stock_items").get().count || 0;
-  const issueCount =
-    db.prepare("SELECT COUNT(*) AS count FROM issue_records").get().count || 0;
-  const serialAssetCount =
-    db.prepare("SELECT COUNT(*) AS count FROM hq_serial_assets").get().count ||
-    0;
 
   if (supplierCount === 0) {
     const insertSupplier = db.prepare(`
@@ -952,181 +955,8 @@ const initializeDatabase = () => {
     });
   }
 
-  if (receiptCount === 0) {
-    const insertReceipt = db.prepare(`
-      INSERT INTO receiving_receipts (
-        receiptId,
-        receiptType,
-        supplierId,
-        supplierName,
-        arrivalDate,
-        signedBy,
-        receivedBy,
-        itemCount,
-        totalQuantity,
-        totalAmount,
-        documentCount,
-        documentStatus,
-        status
-      ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
-    `);
-
-    receivingReceiptSeeds.forEach((receipt) => {
-      insertReceipt.run(
-        receipt.receiptId,
-        receipt.receiptType,
-        receipt.supplierId,
-        receipt.supplierName,
-        receipt.arrivalDate,
-        receipt.signedBy,
-        receipt.receivedBy,
-        receipt.itemCount,
-        receipt.totalQuantity,
-        receipt.totalAmount,
-        receipt.documentCount,
-        receipt.documentStatus,
-        receipt.status
-      );
-    });
-  }
-
-  if (stockCount === 0) {
-    const insertStockItem = db.prepare(`
-      INSERT INTO hq_stock_items (
-        stockId,
-        itemName,
-        category,
-        totalQuantity,
-        serializedUnits,
-        nonSerializedUnits,
-        supplierName,
-        lastArrivalDate,
-        storageLocation,
-        status
-      ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
-    `);
-
-    hqStockSeeds.forEach((item) => {
-      insertStockItem.run(
-        item.stockId,
-        item.itemName,
-        item.category,
-        item.totalQuantity,
-        item.serializedUnits,
-        item.nonSerializedUnits,
-        item.supplierName,
-        item.lastArrivalDate,
-        item.storageLocation,
-        item.status
-      );
-    });
-  }
-
-  if (issueCount === 0) {
-    const insertIssue = db.prepare(`
-      INSERT INTO issue_records (
-        issueId,
-        itemName,
-        serialNumber,
-        destinationType,
-        branchId,
-        issuedTo,
-        issuedBy,
-        address,
-        issueDate,
-        attachmentNames,
-        notes,
-        acknowledgedBy,
-        acknowledgedAt,
-        acknowledgementNotes,
-        returnedBy,
-        returnedAt,
-        returnNotes,
-        status
-      ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
-    `);
-
-    issueRecordSeeds.forEach((issue) => {
-      insertIssue.run(
-        issue.issueId,
-        issue.itemName,
-        issue.serialNumber,
-        issue.destinationType,
-        issue.branchId ?? null,
-        issue.issuedTo,
-        issue.issuedBy,
-        issue.address,
-        issue.issueDate,
-        JSON.stringify(issue.attachmentNames),
-        issue.notes ?? null,
-        issue.acknowledgedBy ?? null,
-        issue.acknowledgedAt ?? null,
-        issue.acknowledgementNotes ?? null,
-        issue.returnedBy ?? null,
-        issue.returnedAt ?? null,
-        issue.returnNotes ?? null,
-        issue.status
-      );
-    });
-  }
-
-  if (serialAssetCount === 0) {
-    const stockRows = db
-      .prepare(
-        `
-          SELECT
-            stockId,
-            itemName,
-            serializedUnits,
-            supplierName,
-            lastArrivalDate,
-            storageLocation
-          FROM hq_stock_items
-          WHERE serializedUnits > 0
-          ORDER BY stockId ASC
-        `
-      )
-      .all() as Array<{
-      stockId: string;
-      itemName: string;
-      serializedUnits: number;
-      supplierName: string;
-      lastArrivalDate: string;
-      storageLocation: string;
-    }>;
-
-    const insertSerialAsset = db.prepare(`
-      INSERT INTO hq_serial_assets (
-        assetId,
-        stockId,
-        itemName,
-        serialNumber,
-        supplierName,
-        lastArrivalDate,
-        storageLocation,
-        status,
-        issueId
-      ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
-    `);
-
-    stockRows.forEach((stockRow) => {
-      for (let index = 0; index < stockRow.serializedUnits; index += 1) {
-        insertSerialAsset.run(
-          `${stockRow.stockId}-SER-${String(index + 1).padStart(3, "0")}`,
-          stockRow.stockId,
-          stockRow.itemName,
-          buildSeedSerialNumber(stockRow.itemName, index),
-          stockRow.supplierName,
-          stockRow.lastArrivalDate,
-          stockRow.storageLocation,
-          "Available",
-          null
-        );
-      }
-    });
-  }
-
   backfillIssueRecordBranchIds();
+  backfillStockLocationBalancesIfNeeded();
 };
 
 initializeDatabase();
@@ -1215,7 +1045,13 @@ export const getHqStockData = (): HqStockItem[] => {
         ORDER BY itemName ASC
       `
     )
-    .all() as HqStockItem[];
+    .all() as Array<
+    Omit<HqStockItem, "locationCount" | "storageLocations">
+  >;
+  const locationBalancesByStockId = getStockLocationBalancesByStockIds(
+    db,
+    stockRows.map((stockItem) => stockItem.stockId)
+  );
 
   const availableSerialRows = db
     .prepare(
@@ -1235,13 +1071,34 @@ export const getHqStockData = (): HqStockItem[] => {
   );
 
   return stockRows.map((stockItem) => {
+    const locationBalances =
+      locationBalancesByStockId.get(stockItem.stockId) ?? [];
     const availableSerializedUnits = Math.min(
       availableSerialCounts.get(stockItem.stockId) ?? 0,
       stockItem.totalQuantity
     );
+    const storageLocations = locationBalances.map(
+      (locationBalance) => locationBalance.storageLocation
+    );
 
     return {
       ...stockItem,
+      storageLocation:
+        locationBalances.length > 0
+          ? getStorageLocationSummary(locationBalances)
+          : stockItem.storageLocation || "Unassigned",
+      locationCount:
+        locationBalances.length > 0
+          ? locationBalances.length
+          : stockItem.totalQuantity > 0 && stockItem.storageLocation
+          ? 1
+          : 0,
+      storageLocations:
+        storageLocations.length > 0
+          ? storageLocations
+          : stockItem.storageLocation
+          ? [stockItem.storageLocation]
+          : [],
       serializedUnits: availableSerializedUnits,
       nonSerializedUnits: Math.max(
         stockItem.totalQuantity - availableSerializedUnits,
@@ -1264,6 +1121,7 @@ const getStockMovementsByStockId = (stockId: string, limit = 12) => {
           movementDate,
           referenceType,
           referenceId,
+          storageLocation,
           serialNumbers,
           notes
         FROM stock_movements
@@ -1302,6 +1160,7 @@ export const getHqStockDetailData = (
     ...stockItem,
     availableSerialCount: availableSerialAssets.length,
     issuedSerialCount,
+    locationBalances: getStockLocationBalancesByStockId(db, stockId),
     recentMovements: getStockMovementsByStockId(stockId),
     availableSerialAssets,
   };
@@ -1537,12 +1396,7 @@ const updateHqStockLevels = (
     nextTotalQuantity - nextSerializedUnits,
     0
   );
-  const nextStatus =
-    stockItem.status === "Reserved"
-      ? "Reserved"
-      : nextTotalQuantity <= 5
-      ? "Low Stock"
-      : "Available";
+  const nextStatus = getHqStockStatus(stockItem.status, nextTotalQuantity);
 
   db.prepare(
     `
@@ -1646,12 +1500,15 @@ export const createIssueRecordData = (
         SELECT
           assetId,
           stockId,
-          serialNumber
+          serialNumber,
+          storageLocation
         FROM hq_serial_assets
         WHERE itemName = ? AND serialNumber = ? AND status = 'Available'
       `
     )
-    .get(trimmedItemName, trimmedSerialNumber);
+    .get(trimmedItemName, trimmedSerialNumber) as
+    | Pick<SerialAsset, "assetId" | "stockId" | "serialNumber" | "storageLocation">
+    | undefined;
 
   if (!availableSerialAsset) {
     throw new Error("Selected serial number is not available in HQ stock");
@@ -1795,9 +1652,10 @@ export const createIssueRecordData = (
           movementDate,
           referenceType,
           referenceId,
+          storageLocation,
           serialNumbers,
           notes
-        ) VALUES (?, 'Issue Out', ?, ?, ?, ?, 'issue_record', ?, ?, ?)
+        ) VALUES (?, 'Issue Out', ?, ?, ?, ?, 'issue_record', ?, ?, ?, ?)
       `
     ).run(
       `${createdRecord.issueId}-MOVE-001`,
@@ -1806,9 +1664,19 @@ export const createIssueRecordData = (
       -1,
       createdRecord.issueDate,
       createdRecord.issueId,
+      availableSerialAsset.storageLocation,
       JSON.stringify([createdRecord.serialNumber]),
       createdRecord.notes ?? null
     );
+
+    adjustStockLocationBalance(db, {
+      stockId: matchingStockItem.stockId,
+      storageLocation: availableSerialAsset.storageLocation,
+      quantityDelta: -1,
+      serializedDelta: -1,
+      nonSerializedDelta: 0,
+      movementDate: createdRecord.issueDate,
+    });
 
     updateHqStockLevels(matchingStockItem, nextTotalQuantity);
 
@@ -1888,26 +1756,103 @@ export const returnIssueRecordData = (
     throw new Error("Missing return fields");
   }
 
-  const matchingStockItem = db
-    .prepare("SELECT * FROM hq_stock_items WHERE itemName = ?")
-    .get(issueRecord.itemName);
-  const serialAsset = db
-    .prepare(
-      `
+  db.exec("BEGIN");
+
+  try {
+    const matchingStockItem = db
+      .prepare("SELECT * FROM hq_stock_items WHERE itemName = ?")
+      .get(issueRecord.itemName) as HqStockItem | undefined;
+    const serialAsset = db
+      .prepare(
+        `
         SELECT
           assetId,
           stockId,
+          storageLocation,
           status,
           issueId
         FROM hq_serial_assets
         WHERE serialNumber = ?
       `
     )
-    .get(issueRecord.serialNumber);
+      .get(issueRecord.serialNumber) as
+      | Pick<
+          SerialAsset,
+          "assetId" | "stockId" | "storageLocation" | "status" | "issueId"
+        >
+      | undefined;
 
-  db.exec("BEGIN");
+    if (!matchingStockItem) {
+      throw new Error("HQ stock item was not found for this return");
+    }
 
-  try {
+    if (!serialAsset) {
+      throw new Error("Serial asset was not found for this issue");
+    }
+
+    if (serialAsset.status !== "Issued") {
+      throw new Error("Serial asset is not currently issued");
+    }
+
+    if (serialAsset.issueId !== issueId) {
+      throw new Error("Serial asset is linked to a different issue");
+    }
+
+    if (serialAsset.stockId !== matchingStockItem.stockId) {
+      throw new Error("Serial asset is linked to the wrong HQ stock item");
+    }
+
+    const nextTotalQuantity = matchingStockItem.totalQuantity + 1;
+
+    db.prepare(
+      `
+        UPDATE hq_serial_assets
+        SET
+          status = 'Available',
+          issueId = NULL
+        WHERE assetId = ?
+      `
+    ).run(serialAsset.assetId);
+
+    db.prepare(
+      `
+        INSERT INTO stock_movements (
+          movementId,
+          movementType,
+          stockId,
+          itemName,
+          quantityDelta,
+          movementDate,
+          referenceType,
+          referenceId,
+          storageLocation,
+          serialNumbers,
+          notes
+        ) VALUES (?, 'Return', ?, ?, ?, ?, 'issue_record', ?, ?, ?, ?)
+      `
+    ).run(
+      `${issueId}-MOVE-RET-001`,
+      matchingStockItem.stockId,
+      issueRecord.itemName,
+      1,
+      returnedAt,
+      issueId,
+      serialAsset.storageLocation,
+      JSON.stringify([issueRecord.serialNumber]),
+      returnNotes ?? null
+    );
+
+    adjustStockLocationBalance(db, {
+      stockId: matchingStockItem.stockId,
+      storageLocation: serialAsset.storageLocation,
+      quantityDelta: 1,
+      serializedDelta: 1,
+      nonSerializedDelta: 0,
+      movementDate: returnedAt,
+    });
+
+    updateHqStockLevels(matchingStockItem, nextTotalQuantity);
+
     db.prepare(
       `
         UPDATE issue_records
@@ -1919,56 +1864,6 @@ export const returnIssueRecordData = (
         WHERE issueId = ?
       `
     ).run(returnedBy, returnedAt, returnNotes ?? null, issueId);
-
-    const canRestock =
-      matchingStockItem &&
-      serialAsset &&
-      serialAsset.status === "Issued" &&
-      (!serialAsset.issueId || serialAsset.issueId === issueId);
-
-    if (serialAsset && serialAsset.status === "Issued") {
-      db.prepare(
-        `
-          UPDATE hq_serial_assets
-          SET
-            status = 'Available',
-            issueId = NULL
-          WHERE assetId = ?
-        `
-      ).run(serialAsset.assetId);
-    }
-
-    if (canRestock) {
-      const nextTotalQuantity = matchingStockItem.totalQuantity + 1;
-
-      db.prepare(
-        `
-          INSERT INTO stock_movements (
-            movementId,
-            movementType,
-            stockId,
-            itemName,
-            quantityDelta,
-            movementDate,
-            referenceType,
-            referenceId,
-            serialNumbers,
-            notes
-          ) VALUES (?, 'Return', ?, ?, ?, ?, 'issue_record', ?, ?, ?)
-        `
-      ).run(
-        `${issueId}-MOVE-RET-001`,
-        matchingStockItem.stockId,
-        issueRecord.itemName,
-        1,
-        returnedAt,
-        issueId,
-        JSON.stringify([issueRecord.serialNumber]),
-        returnNotes ?? null
-      );
-
-      updateHqStockLevels(matchingStockItem, nextTotalQuantity);
-    }
 
     db.exec("COMMIT");
   } catch (error) {

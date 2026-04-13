@@ -1,5 +1,5 @@
 import { Request, Response } from "express";
-import { getUsersData } from "../lib/fileData";
+import { getUsersData } from "../lib/usersData";
 
 export const getUsers = async (req: Request, res: Response): Promise<void> => {
   try {

@@ -1,5 +1,6 @@
 "use client";
 
+import { getBusinessTodayDate } from "@/utils/date";
 import {
   NewReceivingReceiptLine,
   ReceivingKnownItem,
@@ -54,7 +55,7 @@ const createInitialLine = (): ReceiptLineForm => ({
 const createInitialFormState = (): ReceiptFormState => ({
   receiptType: "Single Item",
   supplierId: "",
-  arrivalDate: new Date().toISOString().split("T")[0],
+  arrivalDate: getBusinessTodayDate(),
   signedBy: "",
   receivedBy: "",
   documentStatus: "Pending Review",

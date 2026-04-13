@@ -1,6 +1,12 @@
 import fs from "fs";
 import path from "path";
 import { UploadedReceiptAttachment } from "./receiptUploads";
+import {
+  adjustStockLocationBalance,
+  ensureStockLocationBalanceSchema,
+  getPrimaryStorageLocation,
+  getStockLocationBalancesByStockIds,
+} from "./stockLocationBalances";
 
 const { DatabaseSync } = require("node:sqlite") as {
   DatabaseSync: new (path: string) => any;
@@ -152,6 +158,14 @@ fs.mkdirSync(path.dirname(resolvedDatabasePath), { recursive: true });
 
 const db = new DatabaseSync(resolvedDatabasePath);
 
+const getTableColumns = (tableName: string) => {
+  return (
+    db
+      .prepare(`PRAGMA table_info(${tableName})`)
+      .all() as Array<{ name: string }>
+  ).map((column) => column.name);
+};
+
 const parseJsonArray = (value: string | null) => {
   if (!value) return [];
 
@@ -223,6 +237,7 @@ const ensureExtendedReceivingSchema = () => {
       movementDate TEXT NOT NULL,
       referenceType TEXT NOT NULL,
       referenceId TEXT NOT NULL,
+      storageLocation TEXT,
       serialNumbers TEXT,
       notes TEXT
     );
@@ -233,6 +248,20 @@ const ensureExtendedReceivingSchema = () => {
     CREATE INDEX IF NOT EXISTS idx_stock_movements_reference
     ON stock_movements (referenceType, referenceId);
   `);
+
+  ensureStockLocationBalanceSchema(db);
+
+  const stockMovementColumns = getTableColumns("stock_movements");
+
+  if (
+    stockMovementColumns.length > 0 &&
+    !stockMovementColumns.includes("storageLocation")
+  ) {
+    db.exec(`
+      ALTER TABLE stock_movements
+      ADD COLUMN storageLocation TEXT
+    `);
+  }
 
   const stockLocationCount =
     db.prepare("SELECT COUNT(*) AS count FROM stock_locations").get().count || 0;
@@ -500,24 +529,40 @@ export const getReceivingOptionsData = (): ReceivingOptions => {
       .prepare(
         `
           SELECT
+            stockId,
             itemName,
             category,
-            storageLocation AS defaultStorageLocation,
+            storageLocation,
             supplierName
           FROM hq_stock_items
           ORDER BY itemName ASC
         `
       )
       .all() as Array<{
+      stockId: string;
       itemName: string;
       category: string;
-      defaultStorageLocation: string;
+      storageLocation: string;
       supplierName: string;
     }>
-  ).map((item) => ({
-    ...item,
-    isSerialized: isSerializedItemInStock(item.itemName),
-  }));
+  );
+  const stockLocationBalancesByStockId = getStockLocationBalancesByStockIds(
+    db,
+    knownItems.map((item) => item.stockId)
+  );
+  const resolvedKnownItems = knownItems.map((item) => {
+    const locationBalances =
+      stockLocationBalancesByStockId.get(item.stockId) ?? [];
+
+    return {
+      itemName: item.itemName,
+      category: item.category,
+      defaultStorageLocation:
+        getPrimaryStorageLocation(locationBalances) ?? item.storageLocation,
+      supplierName: item.supplierName,
+      isSerialized: isSerializedItemInStock(item.itemName),
+    };
+  });
 
   const receivedBySuggestions = (
     db
@@ -546,7 +591,7 @@ export const getReceivingOptionsData = (): ReceivingOptions => {
   return {
     suppliers,
     stockLocations,
-    knownItems,
+    knownItems: resolvedKnownItems,
     receivedBySuggestions,
     signedBySuggestions,
   };
@@ -999,9 +1044,10 @@ export const createReceivingReceiptData = (
           movementDate,
           referenceType,
           referenceId,
+          storageLocation,
           serialNumbers,
           notes
-        ) VALUES (?, 'Receipt', ?, ?, ?, ?, 'receiving_receipt', ?, ?, ?)
+        ) VALUES (?, 'Receipt', ?, ?, ?, ?, 'receiving_receipt', ?, ?, ?, ?)
       `
     );
 
@@ -1058,7 +1104,7 @@ export const createReceivingReceiptData = (
           arrivalDate,
           line.storageLocation,
           "Available"
-        );
+          );
       }
 
       if (line.isSerialized) {
@@ -1107,6 +1153,15 @@ export const createReceivingReceiptData = (
         });
       }
 
+      adjustStockLocationBalance(db, {
+        stockId,
+        storageLocation: line.storageLocation,
+        quantityDelta: line.quantity,
+        serializedDelta: line.isSerialized ? line.quantity : 0,
+        nonSerializedDelta: line.isSerialized ? 0 : line.quantity,
+        movementDate: arrivalDate,
+      });
+
       const availableSerialCount = getAvailableSerialCountByStockId(stockId);
       const nonSerializedUnits = Math.max(
         nextTotalQuantity - availableSerialCount,
@@ -1124,7 +1179,6 @@ export const createReceivingReceiptData = (
             nonSerializedUnits = ?,
             supplierName = ?,
             lastArrivalDate = ?,
-            storageLocation = ?,
             status = ?
           WHERE stockId = ?
         `
@@ -1135,7 +1189,6 @@ export const createReceivingReceiptData = (
         nonSerializedUnits,
         supplier.name,
         arrivalDate,
-        line.storageLocation,
         nextStatus,
         stockId
       );
@@ -1147,6 +1200,7 @@ export const createReceivingReceiptData = (
         line.quantity,
         arrivalDate,
         createdReceipt.receiptId,
+        line.storageLocation,
         line.serialNumbers.length > 0 ? JSON.stringify(line.serialNumbers) : null,
         `Receipt line ${line.lineNumber}`
       );

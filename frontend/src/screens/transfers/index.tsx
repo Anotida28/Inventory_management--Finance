@@ -1,6 +1,7 @@
 "use client";
 
 import Header from "@/components/Header";
+import { getBusinessTodayDate } from "@/utils/date";
 import {
   Branch,
   IssueRecord,
@@ -45,8 +46,6 @@ type IssueActionFormData = {
   returnNotes: string;
 };
 
-const getTodayDate = () => new Date().toISOString().split("T")[0];
-
 const initialFormData: IssueFormData = {
   itemName: "",
   serialNumber: "",
@@ -55,16 +54,16 @@ const initialFormData: IssueFormData = {
   issuedTo: "",
   issuedBy: "",
   address: "",
-  issueDate: getTodayDate(),
+  issueDate: getBusinessTodayDate(),
   notes: "",
 };
 
 const createInitialActionState = (): IssueActionFormData => ({
   acknowledgedBy: "",
-  acknowledgedAt: getTodayDate(),
+  acknowledgedAt: getBusinessTodayDate(),
   acknowledgementNotes: "",
   returnedBy: "",
-  returnedAt: getTodayDate(),
+  returnedAt: getBusinessTodayDate(),
   returnNotes: "",
 });
 

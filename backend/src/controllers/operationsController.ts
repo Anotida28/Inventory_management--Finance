@@ -231,6 +231,7 @@ export const createIssueRecord = async (
       itemName,
       serialNumber,
       destinationType,
+      branchId,
       issuedTo,
       issuedBy,
       address,
@@ -244,6 +245,7 @@ export const createIssueRecord = async (
         itemName,
         serialNumber,
         destinationType,
+        branchId,
         issuedTo,
         issuedBy,
         address,
@@ -344,6 +346,17 @@ export const returnIssueRecord = async (
     }
 
     if (message === "Issue record has already been returned") {
+      res.status(409).json({ message });
+      return;
+    }
+
+    if (
+      message === "HQ stock item was not found for this return" ||
+      message === "Serial asset was not found for this issue" ||
+      message === "Serial asset is not currently issued" ||
+      message === "Serial asset is linked to a different issue" ||
+      message === "Serial asset is linked to the wrong HQ stock item"
+    ) {
       res.status(409).json({ message });
       return;
     }
