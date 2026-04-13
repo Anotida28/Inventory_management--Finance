@@ -1,0 +1,73 @@
+
+> inventory-management@0.1.0 dev
+> next dev
+
+  ▲ Next.js 14.2.4
+  - Local:        http://localhost:3000
+  - Environments: .env.local
+
+ ✓ Starting...
+ ✓ Ready in 3s
+ ○ Compiling /login ...
+ ✓ Compiled /login in 5.1s (706 modules)
+ GET /login 200 in 5343ms
+ ○ Compiling / ...
+ ✓ Compiled / in 571ms (714 modules)
+ GET / 200 in 734ms
+ ✓ Compiled /favicon.ico in 238ms (387 modules)
+ GET /favicon.ico 200 in 311ms
+ ✓ Compiled /login in 69ms (403 modules)
+ ✓ Compiled in 412ms (730 modules)
+ ✓ Compiled in 346ms (730 modules)
+ GET /login?next=%2F 200 in 124ms
+ ✓ Compiled /favicon.ico in 130ms (403 modules)
+ GET /favicon.ico 200 in 218ms
+ GET /login?next=%2F 200 in 98ms
+ GET /favicon.ico 200 in 9ms
+ ✓ Compiled in 406ms (728 modules)
+ GET /login 200 in 126ms
+ ✓ Compiled /favicon.ico in 115ms (402 modules)
+ GET /favicon.ico 200 in 186ms
+ ✓ Compiled in 354ms (756 modules)
+ GET /login 200 in 78ms
+ GET /favicon.ico 200 in 15ms
+ GET /login 200 in 93ms
+ GET /favicon.ico 200 in 21ms
+ GET /login 200 in 39ms
+ GET /favicon.ico 200 in 7ms
+ ✓ Compiled in 499ms (722 modules)
+ GET /login 200 in 76ms
+ ✓ Compiled /favicon.ico in 191ms (399 modules)
+ GET /favicon.ico 200 in 274ms
+ ○ Compiling /_error ...
+ GET /login 500 in 24ms
+ GET /login 500 in 17ms
+ GET /_next/static/webpack/9354c722fbc11a3e.webpack.hot-update.json 500 in 669ms
+ GET /favicon.ico 500 in 692ms
+ GET /login 500 in 14ms
+ GET /favicon.ico 500 in 5ms
+ GET /login 500 in 26ms
+ GET /favicon.ico 500 in 11ms
+ ✓ Compiled /_not-found in 273ms (527 modules)
+ GET /login 500 in 548ms
+ GET /_next/static/webpack/9354c722fbc11a3e.webpack.hot-update.json 500 in 411ms
+ GET /login 500 in 7ms
+ GET /login 500 in 14ms
+ ○ Compiling /_not-found ...
+ GET /favicon.ico 500 in 9ms
+ GET /_next/static/webpack/9354c722fbc11a3e.webpack.hot-update.json 500 in 307ms
+ GET /login 200 in 9ms
+ GET /login 500 in 19ms
+ GET /favicon.ico 500 in 7ms
+ ✓ Compiled /_not-found in 936ms (934 modules)
+ GET /login 200 in 68ms
+ GET /_next/static/webpack/9354c722fbc11a3e.webpack.hot-update.json 404 in 1069ms
+ GET /login 200 in 73ms
+ ✓ Compiled /favicon.ico in 107ms (440 modules)
+ GET /favicon.ico 200 in 169ms
+ GET /.well-known/appspecific/com.chrome.devtools.json 404 in 78ms
+ GET /login 200 in 37ms
+ GET /favicon.ico 200 in 15ms
+ ✓ Compiled in 383ms (945 modules)
+ ✓ Compiled in 318ms (945 modules)
+ ✓ Compiled in 523ms (945 modules)

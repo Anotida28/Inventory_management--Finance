@@ -3,21 +3,9 @@
 import AuthShell from "@/components/auth/AuthShell";
 import { clearAuthSession, setAuthSession } from "@/lib/authSession";
 import { setCredentials } from "@/services/authSlice";
-import {
-  useGetAuthBootstrapStatusQuery,
-  useLoginMutation,
-} from "@/services/api";
+import { useLoginMutation } from "@/services/api";
 import { useAppDispatch } from "@/services/store";
-import {
-  AlertCircle,
-  ArrowRight,
-  Eye,
-  EyeOff,
-  Loader2,
-  Lock,
-  UserCircle2,
-} from "lucide-react";
-import Link from "next/link";
+import { ArrowRight, Eye, EyeOff, Loader2, Lock, UserCircle2 } from "lucide-react";
 import { useRouter, useSearchParams } from "next/navigation";
 import { FormEvent, useMemo, useState } from "react";
 
@@ -53,13 +41,10 @@ export default function LoginPage() {
   const router = useRouter();
   const searchParams = useSearchParams();
   const [login, { isLoading }] = useLoginMutation();
-  const { data: bootstrapStatus } = useGetAuthBootstrapStatusQuery();
   const [identifier, setIdentifier] = useState("");
   const [password, setPassword] = useState("");
-  const [rememberMe, setRememberMe] = useState(true);
   const [showPassword, setShowPassword] = useState(false);
   const [submitError, setSubmitError] = useState<string | null>(null);
-  const [helperMessage, setHelperMessage] = useState<string | null>(null);
 
   const nextPath = useMemo(
     () => resolveNextPath(searchParams.get("next")),
@@ -70,7 +55,6 @@ export default function LoginPage() {
     event.preventDefault();
 
     setSubmitError(null);
-    setHelperMessage(null);
 
     try {
       const auth = await login({
@@ -79,7 +63,7 @@ export default function LoginPage() {
       }).unwrap();
 
       dispatch(setCredentials(auth));
-      setAuthSession(rememberMe);
+      setAuthSession(true);
       router.replace(nextPath);
     } catch (error) {
       clearAuthSession();
@@ -89,26 +73,11 @@ export default function LoginPage() {
 
   return (
     <AuthShell
+      fitScreen
       title="Welcome back"
-      subtitle="Sign in with the same bearer-token flow used by the Inventory API. Your session will unlock the full receiving and stock workspace."
+      subtitle="Sign in to access receiving, stock, and operations workflows."
       footerNote={<span>Privacy policy available on request.</span>}
-      helper={
-        <div className="rounded-2xl border border-slate-100 bg-slate-50 px-4 py-3 text-xs text-slate-500">
-          Password resets and account lifecycle management are controlled by your
-          inventory administrator.
-        </div>
-      }
     >
-      {bootstrapStatus?.requiresSetup ? (
-        <div className="mb-5 rounded-2xl border border-amber-200 bg-amber-50 px-4 py-3 text-sm text-amber-800">
-          No administrator account exists yet.{" "}
-          <Link className="font-semibold underline" href="/register">
-            Create the first account
-          </Link>{" "}
-          before attempting to sign in.
-        </div>
-      ) : null}
-
       <form onSubmit={handleSubmit} className="space-y-5">
         <div>
           <label className="mb-2 block text-sm font-medium text-slate-700">
@@ -157,38 +126,9 @@ export default function LoginPage() {
           </div>
         </div>
 
-        <div className="flex flex-col gap-3 text-sm text-slate-500 sm:flex-row sm:items-center sm:justify-between">
-          <label className="inline-flex items-center gap-2">
-            <input
-              type="checkbox"
-              checked={rememberMe}
-              onChange={(event) => setRememberMe(event.target.checked)}
-              className="h-4 w-4 rounded border-slate-300 text-indigo-600 focus:ring-indigo-500"
-            />
-            Keep me signed in on this device
-          </label>
-          <button
-            type="button"
-            className="font-medium text-indigo-600 transition hover:text-indigo-700"
-            onClick={() =>
-              setHelperMessage(
-                "Password resets are handled by your administrator until a dedicated recovery flow is added."
-              )
-            }
-          >
-            Forgot your password?
-          </button>
-        </div>
-
         {submitError ? (
           <div className="rounded-2xl border border-rose-200 bg-rose-50 px-4 py-3 text-sm text-rose-700">
             {submitError}
-          </div>
-        ) : null}
-
-        {helperMessage ? (
-          <div className="rounded-2xl border border-indigo-100 bg-indigo-50 px-4 py-3 text-sm text-indigo-700">
-            {helperMessage}
           </div>
         ) : null}
 
@@ -210,48 +150,6 @@ export default function LoginPage() {
           )}
         </button>
       </form>
-
-      <div className="my-6 flex items-center gap-4 text-xs uppercase tracking-[0.22em] text-slate-300">
-        <span className="h-px flex-1 bg-slate-200" />
-        <span>Alternative sign-in</span>
-        <span className="h-px flex-1 bg-slate-200" />
-      </div>
-
-      <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
-        {["Google SSO", "Apple SSO"].map((label) => (
-          <button
-            key={label}
-            type="button"
-            disabled
-            className="rounded-2xl border border-slate-200 bg-slate-50 px-4 py-3 text-sm font-medium text-slate-400"
-          >
-            {label} coming soon
-          </button>
-        ))}
-      </div>
-
-      <p className="mt-6 text-center text-sm text-slate-500">
-        {bootstrapStatus?.requiresSetup ? (
-          <>
-            Need to initialize the system?{" "}
-            <Link href="/register" className="font-semibold text-indigo-600">
-              Create the first administrator
-            </Link>
-          </>
-        ) : (
-          <>
-            Need an account?{" "}
-            <span className="font-semibold text-slate-700">
-              Ask your administrator to create one from the Users page.
-            </span>
-          </>
-        )}
-      </p>
-
-      <div className="mt-5 flex items-center gap-2 rounded-2xl border border-slate-100 bg-slate-50 px-4 py-3 text-xs text-slate-500">
-        <AlertCircle className="h-4 w-4 shrink-0 text-indigo-500" />
-        API auth endpoint: <code className="font-mono text-slate-700">POST /api/auth/login</code>
-      </div>
     </AuthShell>
   );
 }

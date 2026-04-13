@@ -1,0 +1,99 @@
+ ⨯ ./src/app/login/page.tsx
+Error: 
+  [31mx[0m Unexpected token `AuthShell`. Expected jsx identifier
+    ,-[[36;1;4mC:\Users\om526127\Documents\GitHub\Projects\Inventory_management -Finance\frontend\src\app\login\page.tsx[0m:73:1]
+ [2m73[0m |   };
+ [2m74[0m | 
+ [2m75[0m |   return (
+ [2m76[0m |     <AuthShell
+    : [31;1m     ^^^^^^^^^[0m
+ [2m77[0m |       fitScreen
+ [2m78[0m |       title="Welcome back"
+ [2m79[0m |       subtitle="Sign in with the same bearer-token flow used by the Inventory API. Your session will unlock the full receiving and stock workspace."
+    `----
+
+Caused by:
+    Syntax Error
+
+Import trace for requested module:
+./src/app/login/page.tsx
+ ⨯ ./src/app/login/page.tsx
+Error: 
+  [31mx[0m Unexpected token `AuthShell`. Expected jsx identifier
+    ,-[[36;1;4mC:\Users\om526127\Documents\GitHub\Projects\Inventory_management -Finance\frontend\src\app\login\page.tsx[0m:73:1]
+ [2m73[0m |   };
+ [2m74[0m | 
+ [2m75[0m |   return (
+ [2m76[0m |     <AuthShell
+    : [31;1m     ^^^^^^^^^[0m
+ [2m77[0m |       fitScreen
+ [2m78[0m |       title="Welcome back"
+ [2m79[0m |       subtitle="Sign in with the same bearer-token flow used by the Inventory API. Your session will unlock the full receiving and stock workspace."
+    `----
+
+Caused by:
+    Syntax Error
+
+Import trace for requested module:
+./src/app/login/page.tsx
+ ⨯ ./src/app/login/page.tsx
+Error: 
+  [31mx[0m Unexpected token `AuthShell`. Expected jsx identifier
+    ,-[[36;1;4mC:\Users\om526127\Documents\GitHub\Projects\Inventory_management -Finance\frontend\src\app\login\page.tsx[0m:73:1]
+ [2m73[0m |   };
+ [2m74[0m | 
+ [2m75[0m |   return (
+ [2m76[0m |     <AuthShell
+    : [31;1m     ^^^^^^^^^[0m
+ [2m77[0m |       fitScreen
+ [2m78[0m |       title="Welcome back"
+ [2m79[0m |       subtitle="Sign in with the same bearer-token flow used by the Inventory API. Your session will unlock the full receiving and stock workspace."
+    `----
+
+Caused by:
+    Syntax Error
+
+Import trace for requested module:
+./src/app/login/page.tsx
+ ⚠ Fast Refresh had to perform a full reload due to a runtime error.
+ ⨯ ./src/app/login/page.tsx
+Error: 
+  [31mx[0m Unexpected token `AuthShell`. Expected jsx identifier
+    ,-[[36;1;4mC:\Users\om526127\Documents\GitHub\Projects\Inventory_management -Finance\frontend\src\app\login\page.tsx[0m:73:1]
+ [2m73[0m |   };
+ [2m74[0m | 
+ [2m75[0m |   return (
+ [2m76[0m |     <AuthShell
+    : [31;1m     ^^^^^^^^^[0m
+ [2m77[0m |       fitScreen
+ [2m78[0m |       title="Welcome back"
+ [2m79[0m |       subtitle="Sign in with the same bearer-token flow used by the Inventory API. Your session will unlock the full receiving and stock workspace."
+    `----
+
+Caused by:
+    Syntax Error
+
+Import trace for requested module:
+./src/app/login/page.tsx
+ ⚠ Fast Refresh had to perform a full reload due to a runtime error.
+ ⨯ ./src/app/login/page.tsx
+Error: 
+  [31mx[0m Expected ',', got 'export'
+    ,-[[36;1;4mC:\Users\om526127\Documents\GitHub\Projects\Inventory_management -Finance\frontend\src\app\login\page.tsx[0m:50:1]
+ [2m50[0m |   const nextPath = useMemo(
+ [2m51[0m |     () => resolveNextPath(searchParams.get("next")),
+ [2m52[0m |     [searchParams]
+ [2m53[0m |   export default function LoginPage() {
+    : [31;1m  ^^^^^^[0m
+ [2m54[0m |     const dispatch = useAppDispatch();
+ [2m55[0m |     const router = useRouter();
+ [2m56[0m |     const searchParams = useSearchParams();
+    `----
+
+Caused by:
+    Syntax Error
+
+Import trace for requested module:
+./src/app/login/page.tsx
+ ⚠ Fast Refresh had to perform a full reload. Read more: https://nextjs.org/docs/messages/fast-refresh-reload
+ ⚠ Fast Refresh had to perform a full reload. Read more: https://nextjs.org/docs/messages/fast-refresh-reload
