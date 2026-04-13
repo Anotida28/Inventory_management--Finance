@@ -323,6 +323,17 @@ const normalizeOptionalString = (value: unknown) => {
   return trimmedValue ? trimmedValue : undefined;
 };
 
+const normalizeIssueRecordInput = (newIssueRecord: NewIssueRecord) => ({
+  itemName: normalizeOptionalString(newIssueRecord.itemName),
+  serialNumber: normalizeOptionalString(newIssueRecord.serialNumber),
+  branchId: normalizeOptionalString(newIssueRecord.branchId),
+  issuedTo: normalizeOptionalString(newIssueRecord.issuedTo),
+  issuedBy: normalizeOptionalString(newIssueRecord.issuedBy),
+  address: normalizeOptionalString(newIssueRecord.address),
+  issueDate: normalizeOptionalString(newIssueRecord.issueDate),
+  notes: normalizeOptionalString(newIssueRecord.notes),
+});
+
 const getTodayDate = () => getBusinessTodayDate();
 
 const mapIssueRecord = (row: any): IssueRecord => ({
@@ -1431,12 +1442,7 @@ export const createIssueRecordData = (
     highestIssueSequence + 1
   ).padStart(3, "0")}`;
 
-  const trimmedItemName = newIssueRecord.itemName.trim();
-  const trimmedSerialNumber = newIssueRecord.serialNumber.trim();
-  const trimmedIssuedBy = newIssueRecord.issuedBy.trim();
-  const trimmedIssuedTo = newIssueRecord.issuedTo.trim();
-  const trimmedAddress = newIssueRecord.address.trim();
-  const trimmedNotes = normalizeOptionalString(newIssueRecord.notes);
+  const normalizedInput = normalizeIssueRecordInput(newIssueRecord);
   const isBranchIssue = newIssueRecord.destinationType === "Branch";
   const isPersonIssue = newIssueRecord.destinationType === "Person";
 
@@ -1444,27 +1450,44 @@ export const createIssueRecordData = (
     throw new Error("Invalid issue destination type");
   }
 
+  if (
+    !normalizedInput.itemName ||
+    !normalizedInput.serialNumber ||
+    !normalizedInput.issuedBy ||
+    !normalizedInput.issueDate
+  ) {
+    throw new Error("Missing required issue-out fields");
+  }
+
+  if (
+    isPersonIssue &&
+    (!normalizedInput.issuedTo || !normalizedInput.address)
+  ) {
+    throw new Error("Missing required issue-out fields");
+  }
+
+  if (
+    isBranchIssue &&
+    !normalizedInput.branchId &&
+    !normalizedInput.issuedTo
+  ) {
+    throw new Error("Missing required issue-out fields");
+  }
+
   const selectedBranch = isBranchIssue
-    ? newIssueRecord.branchId
-      ? getBranchById(newIssueRecord.branchId)
-      : getBranchByName(trimmedIssuedTo)
+    ? normalizedInput.branchId
+      ? getBranchById(normalizedInput.branchId)
+      : getBranchByName(normalizedInput.issuedTo!)
     : undefined;
 
   if (isBranchIssue && (!selectedBranch || selectedBranch.status !== "Active")) {
     throw new Error("Selected branch was not found");
   }
 
-  const resolvedIssuedTo = selectedBranch?.name ?? trimmedIssuedTo;
-  const resolvedAddress = selectedBranch?.address ?? trimmedAddress;
+  const resolvedIssuedTo = selectedBranch?.name ?? normalizedInput.issuedTo;
+  const resolvedAddress = selectedBranch?.address ?? normalizedInput.address;
 
-  if (
-    !trimmedItemName ||
-    !trimmedSerialNumber ||
-    !resolvedIssuedTo ||
-    !trimmedIssuedBy ||
-    !resolvedAddress ||
-    !newIssueRecord.issueDate
-  ) {
+  if (!resolvedIssuedTo || !resolvedAddress) {
     throw new Error("Missing required issue-out fields");
   }
 
@@ -1476,7 +1499,7 @@ export const createIssueRecordData = (
         WHERE serialNumber = ? AND status != 'Returned'
       `
     )
-    .get(trimmedSerialNumber);
+    .get(normalizedInput.serialNumber);
 
   if (existingActiveIssue) {
     throw new Error("This serial number has already been issued");
@@ -1484,7 +1507,7 @@ export const createIssueRecordData = (
 
   const matchingStockItem = db
     .prepare("SELECT * FROM hq_stock_items WHERE itemName = ?")
-    .get(trimmedItemName);
+    .get(normalizedInput.itemName);
 
   if (!matchingStockItem) {
     throw new Error("Item was not found in HQ stock");
@@ -1506,7 +1529,7 @@ export const createIssueRecordData = (
         WHERE itemName = ? AND serialNumber = ? AND status = 'Available'
       `
     )
-    .get(trimmedItemName, trimmedSerialNumber) as
+    .get(normalizedInput.itemName, normalizedInput.serialNumber) as
     | Pick<SerialAsset, "assetId" | "stockId" | "serialNumber" | "storageLocation">
     | undefined;
 
@@ -1522,17 +1545,17 @@ export const createIssueRecordData = (
 
   const createdRecord: IssueRecord = {
     issueId,
-    itemName: trimmedItemName,
-    serialNumber: trimmedSerialNumber,
+    itemName: normalizedInput.itemName,
+    serialNumber: normalizedInput.serialNumber,
     destinationType: newIssueRecord.destinationType,
     branchId: selectedBranch?.branchId,
     issuedTo: resolvedIssuedTo,
-    issuedBy: trimmedIssuedBy,
+    issuedBy: normalizedInput.issuedBy,
     address: resolvedAddress,
-    issueDate: newIssueRecord.issueDate,
+    issueDate: normalizedInput.issueDate,
     attachmentNames,
     attachments: [],
-    notes: trimmedNotes,
+    notes: normalizedInput.notes,
     status: "Issued",
   };
 
@@ -1707,7 +1730,7 @@ export const acknowledgeIssueRecordData = (
     throw new Error("Issue record has already been acknowledged");
   }
 
-  const acknowledgedBy = acknowledgement.acknowledgedBy.trim();
+  const acknowledgedBy = normalizeOptionalString(acknowledgement.acknowledgedBy);
   const acknowledgedAt =
     normalizeOptionalString(acknowledgement.acknowledgedAt) ?? getTodayDate();
   const acknowledgementNotes = normalizeOptionalString(
@@ -1747,7 +1770,7 @@ export const returnIssueRecordData = (
     throw new Error("Issue record has already been returned");
   }
 
-  const returnedBy = issueReturn.returnedBy.trim();
+  const returnedBy = normalizeOptionalString(issueReturn.returnedBy);
   const returnedAt =
     normalizeOptionalString(issueReturn.returnedAt) ?? getTodayDate();
   const returnNotes = normalizeOptionalString(issueReturn.returnNotes);
@@ -1874,7 +1897,7 @@ export const returnIssueRecordData = (
   return getIssueRecordByIdData(issueId);
 };
 
-const buildDocumentQueue = (
+const buildDocumentQueueEntries = (
   receivingReceipts: ReceivingReceipt[],
   issueRecords: IssueRecord[]
 ) => {
@@ -1912,13 +1935,11 @@ const buildDocumentQueue = (
       reason: "Issue record has no dispatch or handover document attached.",
     }));
 
-  return [...receiptEntries, ...issueEntries]
-    .sort((left, right) =>
-      right.date === left.date
-        ? right.referenceId.localeCompare(left.referenceId)
-        : right.date.localeCompare(left.date)
-    )
-    .slice(0, 6);
+  return [...receiptEntries, ...issueEntries].sort((left, right) =>
+    right.date === left.date
+      ? right.referenceId.localeCompare(left.referenceId)
+      : right.date.localeCompare(left.date)
+  );
 };
 
 const buildRecentActivity = (
@@ -2060,6 +2081,17 @@ export const getOperationsOverviewData = () => {
   const suppliers = getSuppliersData();
   const branches = getBranchesData();
   const currentMonthPrefix = getTodayDate().slice(0, 7);
+  const documentQueueEntries = buildDocumentQueueEntries(
+    receivingReceipts,
+    issueRecords
+  );
+  const documentsPendingReview = documentQueueEntries.filter(
+    (entry) => entry.documentStatus === "Pending Review"
+  ).length;
+  const missingDocumentItems = documentQueueEntries.filter(
+    (entry) => entry.documentStatus === "Missing"
+  ).length;
+  const documentQueueTotal = documentQueueEntries.length;
 
   const receiptsThisMonth = receivingReceipts.filter((receipt) =>
     receipt.arrivalDate.startsWith(currentMonthPrefix)
@@ -2076,9 +2108,6 @@ export const getOperationsOverviewData = () => {
     (sum, item) => sum + item.serializedUnits,
     0
   );
-  const documentsPendingReview = receivingReceipts.filter(
-    (receipt) => receipt.documentStatus !== "Complete"
-  ).length;
   const lowStockItems = hqStockItems.filter((item) => item.status === "Low Stock");
   const acknowledgedIssues = issueRecords.filter(
     (issue) => issue.status === "Acknowledged"
@@ -2110,7 +2139,10 @@ export const getOperationsOverviewData = () => {
     pendingIssues: issueRecords.filter((issue) => issue.status === "Issued")
       .length,
     activeSuppliers: suppliers.length,
+    documentExceptions: documentQueueTotal,
     documentsPendingReview,
+    missingDocumentItems,
+    documentQueueTotal,
     lowStockItems: lowStockItems.length,
     acknowledgedIssues,
     returnedIssues,
@@ -2128,7 +2160,7 @@ export const getOperationsOverviewData = () => {
           : left.totalQuantity - right.totalQuantity
       )
       .slice(0, 5),
-    documentQueue: buildDocumentQueue(receivingReceipts, issueRecords),
+    documentQueue: documentQueueEntries.slice(0, 6),
     recentActivity: buildRecentActivity(receivingReceipts, issueRecords),
     auditAlerts: buildAuditAlerts(hqStockItems, receivingReceipts, issueRecords),
   };

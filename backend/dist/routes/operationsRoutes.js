@@ -10,6 +10,8 @@ router.get("/receiving-options", operationsController_1.getReceivingOptions);
 router.get("/receipts", operationsController_1.getReceivingReceipts);
 router.get("/receipts/:receiptId", operationsController_1.getReceivingReceiptById);
 router.post("/receipts", receiptUploads_1.runReceiptAttachmentUpload, operationsController_1.createReceivingReceipt);
+router.post("/receipts/:receiptId/attachments", receiptUploads_1.runReceiptAttachmentUpload, operationsController_1.addReceivingReceiptAttachments);
+router.post("/receipts/:receiptId/verify", operationsController_1.verifyReceivingReceipt);
 router.get("/stock", operationsController_1.getHqStock);
 router.get("/stock/:stockId", operationsController_1.getHqStockDetail);
 router.get("/serial-assets", operationsController_1.getAvailableSerialAssets);

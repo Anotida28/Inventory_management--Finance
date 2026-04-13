@@ -13,7 +13,10 @@ export interface OperationsOverview {
   serializedUnits: number;
   pendingIssues: number;
   activeSuppliers: number;
+  documentExceptions: number;
   documentsPendingReview: number;
+  missingDocumentItems: number;
+  documentQueueTotal: number;
   lowStockItems: number;
   acknowledgedIssues: number;
   returnedIssues: number;
@@ -144,7 +147,7 @@ export interface NewReceivingReceipt {
   arrivalDate: string;
   signedBy: string;
   receivedBy: string;
-  documentStatus: "Complete" | "Pending Review" | "Missing";
+  documentStatus?: "Pending Review" | "Missing";
   lines: NewReceivingReceiptLine[];
 }
 
@@ -334,6 +337,24 @@ export const api = createApi({
         "SerialAssets",
       ],
     }),
+    addReceivingReceiptAttachments: build.mutation<
+      ReceivingReceiptDetail,
+      { receiptId: string; payload: FormData }
+    >({
+      query: ({ receiptId, payload }) => ({
+        url: `/operations/receipts/${receiptId}/attachments`,
+        method: "POST",
+        body: payload,
+      }),
+      invalidatesTags: ["ReceivingReceipts", "OperationsOverview"],
+    }),
+    verifyReceivingReceipt: build.mutation<ReceivingReceiptDetail, string>({
+      query: (receiptId) => ({
+        url: `/operations/receipts/${receiptId}/verify`,
+        method: "POST",
+      }),
+      invalidatesTags: ["ReceivingReceipts", "OperationsOverview"],
+    }),
     getHqStock: build.query<HqStockItem[], void>({
       query: () => "/operations/stock",
       providesTags: ["HqStock"],
@@ -413,6 +434,8 @@ export const {
   useGetReceivingReceiptsQuery,
   useGetReceivingOptionsQuery,
   useCreateReceivingReceiptMutation,
+  useAddReceivingReceiptAttachmentsMutation,
+  useVerifyReceivingReceiptMutation,
   useGetHqStockQuery,
   useGetHqStockDetailQuery,
   useGetAvailableSerialAssetsQuery,

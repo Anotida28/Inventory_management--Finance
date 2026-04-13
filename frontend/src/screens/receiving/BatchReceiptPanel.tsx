@@ -18,7 +18,6 @@ type BatchReceiptFormState = {
   arrivalDate: string;
   signedBy: string;
   receivedBy: string;
-  documentStatus: "Complete" | "Pending Review" | "Missing";
 };
 
 const acceptedAttachmentTypes =
@@ -33,7 +32,6 @@ const createInitialFormState = (): BatchReceiptFormState => ({
   arrivalDate: getBusinessTodayDate(),
   signedBy: "",
   receivedBy: "",
-  documentStatus: "Pending Review",
 });
 
 const getMutationErrorMessage = (error: unknown) => {
@@ -177,7 +175,6 @@ const BatchReceiptPanel = () => {
       payload.append("arrivalDate", formState.arrivalDate);
       payload.append("signedBy", formState.signedBy);
       payload.append("receivedBy", formState.receivedBy);
-      payload.append("documentStatus", formState.documentStatus);
       payload.append(
         "lines",
         JSON.stringify(validRows.map((row) => row.line))
@@ -187,9 +184,13 @@ const BatchReceiptPanel = () => {
         payload.append("attachments", file);
       });
 
-      await createReceivingReceipt(payload).unwrap();
+      const createdReceipt = await createReceivingReceipt(payload).unwrap();
       resetForm();
-      setSubmitSuccess("Batch receipt imported and HQ stock updated.");
+      setSubmitSuccess(
+        createdReceipt.documentStatus === "Pending Review"
+          ? "Batch receipt imported. Documents are pending review until you verify them."
+          : "Batch receipt imported with missing documents. Upload files from the receiving register when they arrive."
+      );
     } catch (error) {
       setSubmitError(getMutationErrorMessage(error));
     }
@@ -322,25 +323,16 @@ const BatchReceiptPanel = () => {
             </datalist>
           </div>
 
-          <div>
-            <label className={labelClassName}>Document Status</label>
-            <select
-              className={inputClassName}
-              value={formState.documentStatus}
-              onChange={(event) =>
-                setFormState((current) => ({
-                  ...current,
-                  documentStatus: event.target.value as
-                    | "Complete"
-                    | "Pending Review"
-                    | "Missing",
-                }))
-              }
-            >
-              <option value="Pending Review">Pending Review</option>
-              <option value="Complete">Complete</option>
-              <option value="Missing">Missing</option>
-            </select>
+          <div className="md:col-span-2 rounded-2xl border border-blue-100 bg-blue-50/70 p-4">
+            <p className="text-sm font-medium text-gray-700">
+              Document workflow is automatic
+            </p>
+            <p className="mt-2 text-sm text-gray-600">
+              Batch receipts with attachments start as pending review. Batch
+              receipts without attachments are logged as missing documents.
+              Final verification happens from the receiving register after the
+              paperwork is checked.
+            </p>
           </div>
 
           <div>
@@ -356,6 +348,10 @@ const BatchReceiptPanel = () => {
             <p className="mt-2 text-xs text-gray-500">
               Expected columns: `itemName`, `category`, `quantity`, `unitCost`,
               `storageLocation`, `isSerialized`, `serialNumbers`
+            </p>
+            <p className="mt-1 text-xs text-gray-500">
+              The same item can appear on multiple rows when one delivery is split
+              across storage locations or cost lines.
             </p>
           </div>
         </div>

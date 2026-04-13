@@ -4,7 +4,7 @@
   "description": "",
   "main": "dist/index.js",
   "scripts": {
-    "test": "npm run build && node scripts/returnFlowRegression.js",
+    "test": "npm run build && node scripts/returnFlowRegression.js && node scripts/receiptDocumentWorkflowRegression.js",
     "build": "rimraf dist && npx tsc",
     "start": "npm run build && node dist/index.js",
     "dev": "npm run build && concurrently \"npx tsc -w\" \"nodemon --exec ts-node src/index.ts\""

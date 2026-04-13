@@ -126,6 +126,16 @@ const normalizeOptionalString = (value) => {
     const trimmedValue = value.trim();
     return trimmedValue ? trimmedValue : undefined;
 };
+const normalizeIssueRecordInput = (newIssueRecord) => ({
+    itemName: normalizeOptionalString(newIssueRecord.itemName),
+    serialNumber: normalizeOptionalString(newIssueRecord.serialNumber),
+    branchId: normalizeOptionalString(newIssueRecord.branchId),
+    issuedTo: normalizeOptionalString(newIssueRecord.issuedTo),
+    issuedBy: normalizeOptionalString(newIssueRecord.issuedBy),
+    address: normalizeOptionalString(newIssueRecord.address),
+    issueDate: normalizeOptionalString(newIssueRecord.issueDate),
+    notes: normalizeOptionalString(newIssueRecord.notes),
+});
 const getTodayDate = () => (0, date_1.getBusinessTodayDate)();
 const mapIssueRecord = (row) => ({
     issueId: row.issueId,
@@ -976,33 +986,38 @@ const createIssueRecordData = (newIssueRecord, uploadedAttachments = []) => {
         .prepare("SELECT MAX(CAST(SUBSTR(issueId, 10) AS INTEGER)) AS sequence FROM issue_records")
         .get().sequence || 0;
     const issueId = `ISS-${new Date().getFullYear()}-${String(highestIssueSequence + 1).padStart(3, "0")}`;
-    const trimmedItemName = newIssueRecord.itemName.trim();
-    const trimmedSerialNumber = newIssueRecord.serialNumber.trim();
-    const trimmedIssuedBy = newIssueRecord.issuedBy.trim();
-    const trimmedIssuedTo = newIssueRecord.issuedTo.trim();
-    const trimmedAddress = newIssueRecord.address.trim();
-    const trimmedNotes = normalizeOptionalString(newIssueRecord.notes);
+    const normalizedInput = normalizeIssueRecordInput(newIssueRecord);
     const isBranchIssue = newIssueRecord.destinationType === "Branch";
     const isPersonIssue = newIssueRecord.destinationType === "Person";
     if (!isBranchIssue && !isPersonIssue) {
         throw new Error("Invalid issue destination type");
     }
+    if (!normalizedInput.itemName ||
+        !normalizedInput.serialNumber ||
+        !normalizedInput.issuedBy ||
+        !normalizedInput.issueDate) {
+        throw new Error("Missing required issue-out fields");
+    }
+    if (isPersonIssue &&
+        (!normalizedInput.issuedTo || !normalizedInput.address)) {
+        throw new Error("Missing required issue-out fields");
+    }
+    if (isBranchIssue &&
+        !normalizedInput.branchId &&
+        !normalizedInput.issuedTo) {
+        throw new Error("Missing required issue-out fields");
+    }
     const selectedBranch = isBranchIssue
-        ? newIssueRecord.branchId
-            ? getBranchById(newIssueRecord.branchId)
-            : getBranchByName(trimmedIssuedTo)
+        ? normalizedInput.branchId
+            ? getBranchById(normalizedInput.branchId)
+            : getBranchByName(normalizedInput.issuedTo)
         : undefined;
     if (isBranchIssue && (!selectedBranch || selectedBranch.status !== "Active")) {
         throw new Error("Selected branch was not found");
     }
-    const resolvedIssuedTo = (_a = selectedBranch === null || selectedBranch === void 0 ? void 0 : selectedBranch.name) !== null && _a !== void 0 ? _a : trimmedIssuedTo;
-    const resolvedAddress = (_b = selectedBranch === null || selectedBranch === void 0 ? void 0 : selectedBranch.address) !== null && _b !== void 0 ? _b : trimmedAddress;
-    if (!trimmedItemName ||
-        !trimmedSerialNumber ||
-        !resolvedIssuedTo ||
-        !trimmedIssuedBy ||
-        !resolvedAddress ||
-        !newIssueRecord.issueDate) {
+    const resolvedIssuedTo = (_a = selectedBranch === null || selectedBranch === void 0 ? void 0 : selectedBranch.name) !== null && _a !== void 0 ? _a : normalizedInput.issuedTo;
+    const resolvedAddress = (_b = selectedBranch === null || selectedBranch === void 0 ? void 0 : selectedBranch.address) !== null && _b !== void 0 ? _b : normalizedInput.address;
+    if (!resolvedIssuedTo || !resolvedAddress) {
         throw new Error("Missing required issue-out fields");
     }
     const existingActiveIssue = db
@@ -1011,13 +1026,13 @@ const createIssueRecordData = (newIssueRecord, uploadedAttachments = []) => {
         FROM issue_records
         WHERE serialNumber = ? AND status != 'Returned'
       `)
-        .get(trimmedSerialNumber);
+        .get(normalizedInput.serialNumber);
     if (existingActiveIssue) {
         throw new Error("This serial number has already been issued");
     }
     const matchingStockItem = db
         .prepare("SELECT * FROM hq_stock_items WHERE itemName = ?")
-        .get(trimmedItemName);
+        .get(normalizedInput.itemName);
     if (!matchingStockItem) {
         throw new Error("Item was not found in HQ stock");
     }
@@ -1034,7 +1049,7 @@ const createIssueRecordData = (newIssueRecord, uploadedAttachments = []) => {
         FROM hq_serial_assets
         WHERE itemName = ? AND serialNumber = ? AND status = 'Available'
       `)
-        .get(trimmedItemName, trimmedSerialNumber);
+        .get(normalizedInput.itemName, normalizedInput.serialNumber);
     if (!availableSerialAsset) {
         throw new Error("Selected serial number is not available in HQ stock");
     }
@@ -1044,17 +1059,17 @@ const createIssueRecordData = (newIssueRecord, uploadedAttachments = []) => {
         : (_c = newIssueRecord.attachmentNames) !== null && _c !== void 0 ? _c : [];
     const createdRecord = {
         issueId,
-        itemName: trimmedItemName,
-        serialNumber: trimmedSerialNumber,
+        itemName: normalizedInput.itemName,
+        serialNumber: normalizedInput.serialNumber,
         destinationType: newIssueRecord.destinationType,
         branchId: selectedBranch === null || selectedBranch === void 0 ? void 0 : selectedBranch.branchId,
         issuedTo: resolvedIssuedTo,
-        issuedBy: trimmedIssuedBy,
+        issuedBy: normalizedInput.issuedBy,
         address: resolvedAddress,
-        issueDate: newIssueRecord.issueDate,
+        issueDate: normalizedInput.issueDate,
         attachmentNames,
         attachments: [],
-        notes: trimmedNotes,
+        notes: normalizedInput.notes,
         status: "Issued",
     };
     db.exec("BEGIN");
@@ -1164,7 +1179,7 @@ const acknowledgeIssueRecordData = (issueId, acknowledgement) => {
     if (issueRecord.status === "Acknowledged") {
         throw new Error("Issue record has already been acknowledged");
     }
-    const acknowledgedBy = acknowledgement.acknowledgedBy.trim();
+    const acknowledgedBy = normalizeOptionalString(acknowledgement.acknowledgedBy);
     const acknowledgedAt = (_a = normalizeOptionalString(acknowledgement.acknowledgedAt)) !== null && _a !== void 0 ? _a : getTodayDate();
     const acknowledgementNotes = normalizeOptionalString(acknowledgement.acknowledgementNotes);
     if (!acknowledgedBy) {
@@ -1191,7 +1206,7 @@ const returnIssueRecordData = (issueId, issueReturn) => {
     if (issueRecord.status === "Returned") {
         throw new Error("Issue record has already been returned");
     }
-    const returnedBy = issueReturn.returnedBy.trim();
+    const returnedBy = normalizeOptionalString(issueReturn.returnedBy);
     const returnedAt = (_a = normalizeOptionalString(issueReturn.returnedAt)) !== null && _a !== void 0 ? _a : getTodayDate();
     const returnNotes = normalizeOptionalString(issueReturn.returnNotes);
     if (!returnedBy) {
@@ -1279,7 +1294,7 @@ const returnIssueRecordData = (issueId, issueReturn) => {
     return (0, exports.getIssueRecordByIdData)(issueId);
 };
 exports.returnIssueRecordData = returnIssueRecordData;
-const buildDocumentQueue = (receivingReceipts, issueRecords) => {
+const buildDocumentQueueEntries = (receivingReceipts, issueRecords) => {
     const receiptEntries = receivingReceipts
         .filter((receipt) => receipt.documentStatus !== "Complete")
         .map((receipt) => ({
@@ -1308,11 +1323,9 @@ const buildDocumentQueue = (receivingReceipts, issueRecords) => {
         documentCount: 0,
         reason: "Issue record has no dispatch or handover document attached.",
     }));
-    return [...receiptEntries, ...issueEntries]
-        .sort((left, right) => right.date === left.date
+    return [...receiptEntries, ...issueEntries].sort((left, right) => right.date === left.date
         ? right.referenceId.localeCompare(left.referenceId)
-        : right.date.localeCompare(left.date))
-        .slice(0, 6);
+        : right.date.localeCompare(left.date));
 };
 const buildRecentActivity = (receivingReceipts, issueRecords) => {
     const receiptActivity = receivingReceipts.map((receipt) => ({
@@ -1422,11 +1435,14 @@ const getOperationsOverviewData = () => {
     const suppliers = (0, exports.getSuppliersData)();
     const branches = (0, exports.getBranchesData)();
     const currentMonthPrefix = getTodayDate().slice(0, 7);
+    const documentQueueEntries = buildDocumentQueueEntries(receivingReceipts, issueRecords);
+    const documentsPendingReview = documentQueueEntries.filter((entry) => entry.documentStatus === "Pending Review").length;
+    const missingDocumentItems = documentQueueEntries.filter((entry) => entry.documentStatus === "Missing").length;
+    const documentQueueTotal = documentQueueEntries.length;
     const receiptsThisMonth = receivingReceipts.filter((receipt) => receipt.arrivalDate.startsWith(currentMonthPrefix)).length;
     const totalReceivedValue = receivingReceipts.reduce((sum, receipt) => sum + receipt.totalAmount, 0);
     const hqUnitsOnHand = hqStockItems.reduce((sum, item) => sum + item.totalQuantity, 0);
     const serializedUnits = hqStockItems.reduce((sum, item) => sum + item.serializedUnits, 0);
-    const documentsPendingReview = receivingReceipts.filter((receipt) => receipt.documentStatus !== "Complete").length;
     const lowStockItems = hqStockItems.filter((item) => item.status === "Low Stock");
     const acknowledgedIssues = issueRecords.filter((issue) => issue.status === "Acknowledged").length;
     const returnedIssues = issueRecords.filter((issue) => issue.status === "Returned").length;
@@ -1446,7 +1462,10 @@ const getOperationsOverviewData = () => {
         pendingIssues: issueRecords.filter((issue) => issue.status === "Issued")
             .length,
         activeSuppliers: suppliers.length,
+        documentExceptions: documentQueueTotal,
         documentsPendingReview,
+        missingDocumentItems,
+        documentQueueTotal,
         lowStockItems: lowStockItems.length,
         acknowledgedIssues,
         returnedIssues,
@@ -1462,7 +1481,7 @@ const getOperationsOverviewData = () => {
             ? left.itemName.localeCompare(right.itemName)
             : left.totalQuantity - right.totalQuantity)
             .slice(0, 5),
-        documentQueue: buildDocumentQueue(receivingReceipts, issueRecords),
+        documentQueue: documentQueueEntries.slice(0, 6),
         recentActivity: buildRecentActivity(receivingReceipts, issueRecords),
         auditAlerts: buildAuditAlerts(hqStockItems, receivingReceipts, issueRecords),
     };

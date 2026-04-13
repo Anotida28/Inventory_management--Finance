@@ -292,16 +292,9 @@ export const previewBatchReceiptFile = (
     } satisfies BatchReceiptPreviewRow;
   });
 
-  const duplicateItemRows = new Map<string, number[]>();
   const duplicateSerialRows = new Map<string, number[]>();
 
   previewRows.forEach((row) => {
-    if (row.itemName) {
-      const itemRows = duplicateItemRows.get(row.itemName.toLowerCase()) ?? [];
-      itemRows.push(row.rowNumber);
-      duplicateItemRows.set(row.itemName.toLowerCase(), itemRows);
-    }
-
     row.serialNumbers.forEach((serialNumber) => {
       const serialRows = duplicateSerialRows.get(serialNumber.toLowerCase()) ?? [];
       serialRows.push(row.rowNumber);
@@ -310,13 +303,6 @@ export const previewBatchReceiptFile = (
   });
 
   previewRows.forEach((row) => {
-    const duplicateItemEntries = duplicateItemRows.get(row.itemName.toLowerCase());
-
-    if (duplicateItemEntries && duplicateItemEntries.length > 1) {
-      row.issues.push("Each item can only appear once in the batch receipt");
-      row.line = null;
-    }
-
     const duplicateSerials = row.serialNumbers.filter((serialNumber) => {
       const entries = duplicateSerialRows.get(serialNumber.toLowerCase()) ?? [];
       return entries.length > 1;

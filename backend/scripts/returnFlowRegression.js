@@ -88,6 +88,53 @@ const readLocationBalances = (db, stockId) =>
       nonSerializedUnits: row.nonSerializedUnits,
     }));
 
+const readDocumentOverviewCounts = (db) => {
+  const receiptRows = db
+    .prepare(
+      `
+        SELECT receiptId, documentStatus
+        FROM receiving_receipts
+      `
+    )
+    .all();
+  const issueRows = db
+    .prepare(
+      `
+        SELECT
+          issueId,
+          attachmentNames,
+          (
+            SELECT COUNT(*)
+            FROM attachments
+            WHERE entityType = 'issue_record' AND entityId = issue_records.issueId
+          ) AS attachmentCount
+        FROM issue_records
+      `
+    )
+    .all();
+
+  const issuesMissingDocuments = issueRows.filter((row) => {
+    const attachmentNames = row.attachmentNames
+      ? JSON.parse(row.attachmentNames)
+      : [];
+
+    return row.attachmentCount === 0 && attachmentNames.length === 0;
+  }).length;
+
+  const documentsPendingReview = receiptRows.filter(
+    (receipt) => receipt.documentStatus === "Pending Review"
+  ).length;
+  const missingDocumentItems =
+    receiptRows.filter((receipt) => receipt.documentStatus === "Missing").length +
+    issuesMissingDocuments;
+
+  return {
+    documentExceptions: documentsPendingReview + missingDocumentItems,
+    documentsPendingReview,
+    missingDocumentItems,
+  };
+};
+
 const insertStockItem = (db, stockItem) => {
   db.prepare(
     `
@@ -370,9 +417,11 @@ const main = () => {
 
   try {
     const {
+      acknowledgeIssueRecordData,
       createIssueRecordData,
       getHqStockData,
       getHqStockDetailData,
+      getOperationsOverviewData,
       returnIssueRecordData,
     } = require("../dist/lib/operationsData.js");
     const {
@@ -533,6 +582,53 @@ const main = () => {
         },
       ],
     });
+    createReceivingReceiptData(
+      {
+        receiptType: "Single Item",
+        supplierId: "SUP-001",
+        arrivalDate: "2026-04-10",
+        signedBy: "Regression Test",
+        receivedBy: "Stores Officer",
+        documentStatus: "Missing",
+        lines: [
+          {
+            itemName: "Pending Review Overview Device",
+            category: "Laptop",
+            quantity: 1,
+            unitCost: 900,
+            storageLocation: "HQ Cage D3",
+            isSerialized: false,
+          },
+        ],
+      },
+      [
+        {
+          originalName: "pending-review-pack.pdf",
+          storedName: "pending-review-pack.pdf",
+          storagePath: "data/uploads/receipts/pending-review-pack.pdf",
+          mimeType: "application/pdf",
+          fileSize: 1024,
+        },
+      ]
+    );
+    createReceivingReceiptData({
+      receiptType: "Single Item",
+      supplierId: "SUP-001",
+      arrivalDate: "2026-04-11",
+      signedBy: "Regression Test",
+      receivedBy: "Stores Officer",
+      documentStatus: "Missing",
+      lines: [
+        {
+          itemName: "Missing Overview Device",
+          category: "Laptop",
+          quantity: 1,
+          unitCost: 950,
+          storageLocation: "HQ Cage D4",
+          isSerialized: false,
+        },
+      ],
+    });
 
     const multiLocationStock = getHqStockData().find(
       (stockItem) => stockItem.itemName === "Multi Location Test Device"
@@ -557,6 +653,55 @@ const main = () => {
         { storageLocation: "HQ Cage B2", totalQuantity: 3 },
         { storageLocation: "HQ Cage A1", totalQuantity: 2 },
       ]
+    );
+
+    assert.throws(
+      () =>
+        createIssueRecordData({
+          destinationType: "Person",
+        }),
+      /Missing required issue-out fields/
+    );
+
+    assert.throws(
+      () =>
+        acknowledgeIssueRecordData("ISS-002", {
+          acknowledgedAt: "2026-04-13",
+        }),
+      /Missing acknowledgement fields/
+    );
+
+    assert.throws(
+      () =>
+        returnIssueRecordData("ISS-002", {
+          returnedAt: "2026-04-13",
+        }),
+      /Missing return fields/
+    );
+
+    const overview = getOperationsOverviewData();
+    const expectedDocumentCounts = readDocumentOverviewCounts(db);
+
+    assert.equal(
+      overview.documentExceptions,
+      expectedDocumentCounts.documentExceptions
+    );
+    assert.equal(
+      overview.documentsPendingReview,
+      expectedDocumentCounts.documentsPendingReview
+    );
+    assert.equal(
+      overview.missingDocumentItems,
+      expectedDocumentCounts.missingDocumentItems
+    );
+    assert.equal(overview.documentQueueTotal, expectedDocumentCounts.documentExceptions);
+    assert.equal(
+      overview.documentQueue.length,
+      Math.min(expectedDocumentCounts.documentExceptions, 6)
+    );
+    assert.ok(
+      overview.documentQueue.some((entry) => entry.entityType === "Issue"),
+      "Expected document queue preview to include issue records without attachments"
     );
 
     console.log("Operations regression checks passed.");

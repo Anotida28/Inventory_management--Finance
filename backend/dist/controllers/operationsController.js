@@ -9,7 +9,7 @@ var __awaiter = (this && this.__awaiter) || function (thisArg, _arguments, P, ge
     });
 };
 Object.defineProperty(exports, "__esModule", { value: true });
-exports.getSuppliers = exports.downloadOperationAttachment = exports.returnIssueRecord = exports.acknowledgeIssueRecord = exports.createIssueRecord = exports.getIssueRecords = exports.getBranches = exports.getAvailableSerialAssets = exports.getHqStockDetail = exports.getHqStock = exports.createReceivingReceipt = exports.getReceivingReceiptById = exports.getReceivingOptions = exports.getReceivingReceipts = exports.getOperationsOverview = void 0;
+exports.getSuppliers = exports.downloadOperationAttachment = exports.returnIssueRecord = exports.acknowledgeIssueRecord = exports.createIssueRecord = exports.getIssueRecords = exports.getBranches = exports.getAvailableSerialAssets = exports.getHqStockDetail = exports.getHqStock = exports.verifyReceivingReceipt = exports.addReceivingReceiptAttachments = exports.createReceivingReceipt = exports.getReceivingReceiptById = exports.getReceivingOptions = exports.getReceivingReceipts = exports.getOperationsOverview = void 0;
 const operationsData_1 = require("../lib/operationsData");
 const receivingData_1 = require("../lib/receivingData");
 const issueUploads_1 = require("../lib/issueUploads");
@@ -85,6 +85,8 @@ const createReceivingReceipt = (req, res) => __awaiter(void 0, void 0, void 0, f
         if (message === "Missing required receipt fields" ||
             message === "Invalid receipt type" ||
             message === "Invalid document status" ||
+            message ===
+                "Receipts cannot be created as complete. Upload documents first, then verify the receipt after review." ||
             message === "Single item receipts can only contain one line" ||
             message === "Each item can only appear once per receipt" ||
             message === "Supplier was not found" ||
@@ -102,6 +104,53 @@ const createReceivingReceipt = (req, res) => __awaiter(void 0, void 0, void 0, f
     }
 });
 exports.createReceivingReceipt = createReceivingReceipt;
+const addReceivingReceiptAttachments = (req, res) => __awaiter(void 0, void 0, void 0, function* () {
+    const receiptRequest = req;
+    const uploadedFiles = Array.isArray(receiptRequest.files)
+        ? receiptRequest.files
+        : [];
+    try {
+        const updatedReceipt = (0, receivingData_1.appendReceivingReceiptAttachmentsData)(req.params.receiptId, (0, receiptUploads_1.mapUploadedReceiptFiles)(uploadedFiles));
+        res.json(updatedReceipt);
+    }
+    catch (error) {
+        (0, receiptUploads_1.removeUploadedReceiptFiles)(uploadedFiles);
+        const message = getErrorMessage(error);
+        if (message === "Receipt not found") {
+            res.status(404).json({ message });
+            return;
+        }
+        if (message === "At least one attachment is required") {
+            res.status(400).json({ message });
+            return;
+        }
+        res.status(500).json({ message: "Error uploading receipt attachments" });
+    }
+});
+exports.addReceivingReceiptAttachments = addReceivingReceiptAttachments;
+const verifyReceivingReceipt = (req, res) => __awaiter(void 0, void 0, void 0, function* () {
+    try {
+        const updatedReceipt = (0, receivingData_1.verifyReceivingReceiptData)(req.params.receiptId);
+        res.json(updatedReceipt);
+    }
+    catch (error) {
+        const message = getErrorMessage(error);
+        if (message === "Receipt not found") {
+            res.status(404).json({ message });
+            return;
+        }
+        if (message === "Receipt has no attachments to verify") {
+            res.status(400).json({ message });
+            return;
+        }
+        if (message === "Receipt is already verified") {
+            res.status(409).json({ message });
+            return;
+        }
+        res.status(500).json({ message: "Error verifying receipt documents" });
+    }
+});
+exports.verifyReceivingReceipt = verifyReceivingReceipt;
 const getHqStock = (req, res) => __awaiter(void 0, void 0, void 0, function* () {
     try {
         res.json((0, operationsData_1.getHqStockData)());

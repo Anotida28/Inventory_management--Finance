@@ -242,8 +242,23 @@ const ensureExtendedReceivingSchema = () => {
       notes TEXT
     );
 
+    CREATE TABLE IF NOT EXISTS attachments (
+      attachmentId TEXT PRIMARY KEY,
+      entityType TEXT NOT NULL,
+      entityId TEXT NOT NULL,
+      originalName TEXT NOT NULL,
+      storedName TEXT NOT NULL,
+      storagePath TEXT NOT NULL,
+      mimeType TEXT NOT NULL,
+      fileSize INTEGER NOT NULL,
+      uploadedAt TEXT NOT NULL
+    );
+
     CREATE INDEX IF NOT EXISTS idx_receiving_receipt_lines_receipt
     ON receiving_receipt_lines (receiptId, lineNumber);
+
+    CREATE INDEX IF NOT EXISTS idx_attachments_entity
+    ON attachments (entityType, entityId);
 
     CREATE INDEX IF NOT EXISTS idx_stock_movements_reference
     ON stock_movements (referenceType, referenceId);
@@ -388,15 +403,104 @@ const getReceiptLinesByReceiptId = (receiptId: string) => {
   return rows.map(mapReceivingReceiptLine);
 };
 
-const deriveReceiptStatus = (
-  documentStatus: ReceivingReceipt["documentStatus"]
-): ReceivingReceipt["status"] => {
-  if (documentStatus === "Complete") {
-    return "Verified";
+const deriveReceiptDocumentState = (
+  documentStatus: ReceivingReceipt["documentStatus"] | "" | undefined,
+  attachmentCount: number
+): Pick<ReceivingReceipt, "documentCount" | "documentStatus" | "status"> => {
+  if (attachmentCount <= 0) {
+    return {
+      documentCount: 0,
+      documentStatus: "Missing",
+      status: "Logged",
+    };
   }
 
-  return "Pending Review";
+  if (documentStatus === "Complete") {
+    return {
+      documentCount: attachmentCount,
+      documentStatus: "Complete",
+      status: "Verified",
+    };
+  }
+
+  return {
+    documentCount: attachmentCount,
+    documentStatus: "Pending Review",
+    status: "Pending Review",
+  };
 };
+
+const updateReceiptDocumentState = (
+  receiptId: string,
+  documentState: Pick<ReceivingReceipt, "documentCount" | "documentStatus" | "status">
+) => {
+  db.prepare(
+    `
+      UPDATE receiving_receipts
+      SET
+        documentCount = ?,
+        documentStatus = ?,
+        status = ?
+      WHERE receiptId = ?
+    `
+  ).run(
+    documentState.documentCount,
+    documentState.documentStatus,
+    documentState.status,
+    receiptId
+  );
+};
+
+const syncReceivingReceiptDocumentStates = () => {
+  if (getTableColumns("receiving_receipts").length === 0) {
+    return;
+  }
+
+  const rows = db
+    .prepare(
+      `
+        SELECT
+          receipts.receiptId,
+          receipts.documentCount,
+          receipts.documentStatus,
+          receipts.status,
+          COUNT(attachments.attachmentId) AS attachmentCount
+        FROM receiving_receipts AS receipts
+        LEFT JOIN attachments
+          ON attachments.entityType = 'receiving_receipt'
+          AND attachments.entityId = receipts.receiptId
+        GROUP BY
+          receipts.receiptId,
+          receipts.documentCount,
+          receipts.documentStatus,
+          receipts.status
+      `
+    )
+    .all() as Array<{
+    receiptId: string;
+    documentCount: number;
+    documentStatus: ReceivingReceipt["documentStatus"];
+    status: ReceivingReceipt["status"];
+    attachmentCount: number;
+  }>;
+
+  rows.forEach((row) => {
+    const nextDocumentState = deriveReceiptDocumentState(
+      row.documentStatus,
+      row.attachmentCount
+    );
+
+    if (
+      row.documentCount !== nextDocumentState.documentCount ||
+      row.documentStatus !== nextDocumentState.documentStatus ||
+      row.status !== nextDocumentState.status
+    ) {
+      updateReceiptDocumentState(row.receiptId, nextDocumentState);
+    }
+  });
+};
+
+syncReceivingReceiptDocumentStates();
 
 const ensureStockLocationExists = (storageLocation: string) => {
   const existingLocation = db
@@ -598,6 +702,8 @@ export const getReceivingOptionsData = (): ReceivingOptions => {
 };
 
 export const getReceivingReceiptsWithAttachmentsData = (): ReceivingReceipt[] => {
+  syncReceivingReceiptDocumentStates();
+
   const rows = db
     .prepare(
       `
@@ -627,6 +733,10 @@ export const getReceivingReceiptsWithAttachmentsData = (): ReceivingReceipt[] =>
 
   return rows.map((row: any) => {
     const attachments = attachmentsByReceiptId.get(row.receiptId) ?? [];
+    const documentState = deriveReceiptDocumentState(
+      row.documentStatus,
+      attachments.length
+    );
 
     return {
       receiptId: row.receiptId,
@@ -639,9 +749,9 @@ export const getReceivingReceiptsWithAttachmentsData = (): ReceivingReceipt[] =>
       itemCount: row.itemCount,
       totalQuantity: row.totalQuantity,
       totalAmount: row.totalAmount,
-      documentCount: row.documentCount,
-      documentStatus: row.documentStatus,
-      status: row.status,
+      documentCount: documentState.documentCount,
+      documentStatus: documentState.documentStatus,
+      status: documentState.status,
       attachments,
       attachmentNames: attachments.map((attachment) => attachment.originalName),
     };
@@ -651,6 +761,8 @@ export const getReceivingReceiptsWithAttachmentsData = (): ReceivingReceipt[] =>
 export const getReceivingReceiptByIdData = (
   receiptId: string
 ): ReceivingReceiptDetail | null => {
+  syncReceivingReceiptDocumentStates();
+
   const row = db
     .prepare(
       `
@@ -681,6 +793,10 @@ export const getReceivingReceiptByIdData = (
   const attachments = getReceiptAttachmentsByReceiptIds([receiptId]).get(
     receiptId
   ) ?? [];
+  const documentState = deriveReceiptDocumentState(
+    row.documentStatus,
+    attachments.length
+  );
 
   return {
     receiptId: row.receiptId,
@@ -693,9 +809,9 @@ export const getReceivingReceiptByIdData = (
     itemCount: row.itemCount,
     totalQuantity: row.totalQuantity,
     totalAmount: row.totalAmount,
-    documentCount: row.documentCount,
-    documentStatus: row.documentStatus,
-    status: row.status,
+    documentCount: documentState.documentCount,
+    documentStatus: documentState.documentStatus,
+    status: documentState.status,
     attachments,
     attachmentNames: attachments.map((attachment) => attachment.originalName),
     lines: getReceiptLinesByReceiptId(receiptId),
@@ -742,9 +858,9 @@ export const createReceivingReceiptData = (
   const arrivalDate = normalizeString(newReceipt.arrivalDate);
   const signedBy = normalizeString(newReceipt.signedBy);
   const receivedBy = normalizeString(newReceipt.receivedBy);
-  const documentStatus = (
-    normalizeString(newReceipt.documentStatus) || "Pending Review"
-  ) as ReceivingReceipt["documentStatus"];
+  const requestedDocumentStatus = normalizeString(newReceipt.documentStatus) as
+    | ReceivingReceipt["documentStatus"]
+    | "";
   const lines = Array.isArray(newReceipt.lines) ? newReceipt.lines : [];
 
   if (!supplierId || !arrivalDate || !signedBy || !receivedBy || lines.length === 0) {
@@ -755,10 +871,16 @@ export const createReceivingReceiptData = (
     throw new Error("Invalid receipt type");
   }
 
+  if (requestedDocumentStatus === "Complete") {
+    throw new Error(
+      "Receipts cannot be created as complete. Upload documents first, then verify the receipt after review."
+    );
+  }
+
   if (
-    documentStatus !== "Complete" &&
-    documentStatus !== "Pending Review" &&
-    documentStatus !== "Missing"
+    requestedDocumentStatus &&
+    requestedDocumentStatus !== "Pending Review" &&
+    requestedDocumentStatus !== "Missing"
   ) {
     throw new Error("Invalid document status");
   }
@@ -889,16 +1011,35 @@ export const createReceivingReceiptData = (
   });
 
   const seenSerialNumbers = new Set<string>();
-  const seenItemNames = new Set<string>();
+  const receiptItemDefinitions = new Map<
+    string,
+    { lineNumber: number; category: string; isSerialized: boolean }
+  >();
 
   normalizedLines.forEach((line) => {
     const normalizedItemName = line.itemName.toLowerCase();
+    const existingDefinition = receiptItemDefinitions.get(normalizedItemName);
 
-    if (seenItemNames.has(normalizedItemName)) {
-      throw new Error("Each item can only appear once per receipt");
+    if (!existingDefinition) {
+      receiptItemDefinitions.set(normalizedItemName, {
+        lineNumber: line.lineNumber,
+        category: line.category,
+        isSerialized: line.isSerialized,
+      });
+      return;
     }
 
-    seenItemNames.add(normalizedItemName);
+    if (existingDefinition.category !== line.category) {
+      throw new Error(
+        `Receipt line ${line.lineNumber} must use the same category as line ${existingDefinition.lineNumber} for ${line.itemName}`
+      );
+    }
+
+    if (existingDefinition.isSerialized !== line.isSerialized) {
+      throw new Error(
+        `Receipt line ${line.lineNumber} cannot mix serialized and non-serialized entries for ${line.itemName}`
+      );
+    }
   });
 
   normalizedLines.forEach((line) => {
@@ -926,6 +1067,9 @@ export const createReceivingReceiptData = (
   });
 
   const receiptId = getNextReceiptId();
+  const distinctItemCount = new Set(
+    normalizedLines.map((line) => line.itemName.toLowerCase())
+  ).size;
   const totalQuantity = normalizedLines.reduce(
     (sum, line) => sum + line.quantity,
     0
@@ -933,7 +1077,10 @@ export const createReceivingReceiptData = (
   const totalAmount = Number(
     normalizedLines.reduce((sum, line) => sum + line.totalCost, 0).toFixed(2)
   );
-  const createdStatus = deriveReceiptStatus(documentStatus);
+  const createdDocumentState = deriveReceiptDocumentState(
+    requestedDocumentStatus,
+    uploadedAttachments.length
+  );
 
   const createdReceipt: ReceivingReceiptDetail = {
     receiptId,
@@ -943,12 +1090,12 @@ export const createReceivingReceiptData = (
     arrivalDate,
     signedBy,
     receivedBy,
-    itemCount: normalizedLines.length,
+    itemCount: distinctItemCount,
     totalQuantity,
     totalAmount,
-    documentCount: uploadedAttachments.length,
-    documentStatus,
-    status: createdStatus,
+    documentCount: createdDocumentState.documentCount,
+    documentStatus: createdDocumentState.documentStatus,
+    status: createdDocumentState.status,
     attachmentNames: uploadedAttachments.map((attachment) => attachment.originalName),
     attachments: [],
     lines: [],
@@ -1050,6 +1197,68 @@ export const createReceivingReceiptData = (
         ) VALUES (?, 'Receipt', ?, ?, ?, ?, 'receiving_receipt', ?, ?, ?, ?)
       `
     );
+    const insertStockItem = db.prepare(
+      `
+        INSERT INTO hq_stock_items (
+          stockId,
+          itemName,
+          category,
+          totalQuantity,
+          serializedUnits,
+          nonSerializedUnits,
+          supplierName,
+          lastArrivalDate,
+          storageLocation,
+          status
+        ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+      `
+    );
+    const insertSerialAsset = db.prepare(
+      `
+        INSERT INTO hq_serial_assets (
+          assetId,
+          stockId,
+          itemName,
+          serialNumber,
+          supplierName,
+          lastArrivalDate,
+          storageLocation,
+          status,
+          issueId
+        ) VALUES (?, ?, ?, ?, ?, ?, ?, 'Available', ?)
+      `
+    );
+    const updateStockItem = db.prepare(
+      `
+        UPDATE hq_stock_items
+        SET
+          category = ?,
+          totalQuantity = ?,
+          serializedUnits = ?,
+          nonSerializedUnits = ?,
+          supplierName = ?,
+          lastArrivalDate = ?,
+          status = ?
+        WHERE stockId = ?
+      `
+    );
+    const countSerialAssetsByStockId = db.prepare(
+      `
+        SELECT COUNT(*) AS count
+        FROM hq_serial_assets
+        WHERE stockId = ?
+      `
+    );
+    const stockContextByItemName = new Map<
+      string,
+      {
+        stockId: string;
+        totalQuantity: number;
+        availableSerialCount: number;
+        nextSerialSequence: number;
+        category: string;
+      }
+    >();
 
     normalizedLines.forEach((line) => {
       ensureStockLocationExists(line.storageLocation);
@@ -1072,77 +1281,51 @@ export const createReceivingReceiptData = (
         JSON.stringify(line.serialNumbers)
       );
 
-      const existingStockItem = line.existingStockItem;
-      const stockId = existingStockItem?.stockId || getNextStockId();
-      const nextTotalQuantity =
-        (existingStockItem?.totalQuantity ?? 0) + line.quantity;
+      const normalizedItemName = line.itemName.toLowerCase();
+      let stockContext = stockContextByItemName.get(normalizedItemName);
 
-      if (!existingStockItem) {
-        db.prepare(
-          `
-            INSERT INTO hq_stock_items (
-              stockId,
-              itemName,
-              category,
-              totalQuantity,
-              serializedUnits,
-              nonSerializedUnits,
-              supplierName,
-              lastArrivalDate,
-              storageLocation,
-              status
-            ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
-          `
-        ).run(
-          stockId,
-          line.itemName,
-          line.category,
-          0,
-          0,
-          0,
-          supplier.name,
-          arrivalDate,
-          line.storageLocation,
-          "Available"
+      if (!stockContext) {
+        const existingStockItem = line.existingStockItem;
+        const stockId = existingStockItem?.stockId || getNextStockId();
+
+        if (!existingStockItem) {
+          insertStockItem.run(
+            stockId,
+            line.itemName,
+            line.category,
+            0,
+            0,
+            0,
+            supplier.name,
+            arrivalDate,
+            line.storageLocation,
+            "Available"
           );
+        }
+
+        stockContext = {
+          stockId,
+          totalQuantity: existingStockItem?.totalQuantity ?? 0,
+          availableSerialCount: existingStockItem
+            ? getAvailableSerialCountByStockId(stockId)
+            : 0,
+          nextSerialSequence: existingStockItem
+            ? countSerialAssetsByStockId.get(stockId).count || 0
+            : 0,
+          category: line.category,
+        };
+        stockContextByItemName.set(normalizedItemName, stockContext);
       }
 
       if (line.isSerialized) {
-        const existingSerialAssetCount =
-          db
-            .prepare(
-              `
-                SELECT COUNT(*) AS count
-                FROM hq_serial_assets
-                WHERE stockId = ?
-              `
-            )
-            .get(stockId).count || 0;
-
-        const insertSerialAsset = db.prepare(
-          `
-            INSERT INTO hq_serial_assets (
-              assetId,
-              stockId,
-              itemName,
-              serialNumber,
-              supplierName,
-              lastArrivalDate,
-              storageLocation,
-              status,
-              issueId
-            ) VALUES (?, ?, ?, ?, ?, ?, ?, 'Available', ?)
-          `
-        );
-
         line.serialNumbers.forEach((serialNumber, index) => {
-          const assetId = `${stockId}-SER-${String(
-            existingSerialAssetCount + index + 1
+          const assetId = `${stockContext.stockId}-SER-${String(
+            stockContext!.nextSerialSequence + index + 1
           ).padStart(3, "0")}`;
 
           insertSerialAsset.run(
             assetId,
-            stockId,
+            stockContext!.stockId,
             line.itemName,
             serialNumber,
             supplier.name,
@@ -1151,10 +1334,13 @@ export const createReceivingReceiptData = (
             null
           );
         });
+
+        stockContext.nextSerialSequence += line.serialNumbers.length;
+        stockContext.availableSerialCount += line.quantity;
       }
 
       adjustStockLocationBalance(db, {
-        stockId,
+        stockId: stockContext.stockId,
         storageLocation: line.storageLocation,
         quantityDelta: line.quantity,
         serializedDelta: line.isSerialized ? line.quantity : 0,
@@ -1162,40 +1348,28 @@ export const createReceivingReceiptData = (
         movementDate: arrivalDate,
       });
 
-      const availableSerialCount = getAvailableSerialCountByStockId(stockId);
+      stockContext.totalQuantity += line.quantity;
       const nonSerializedUnits = Math.max(
-        nextTotalQuantity - availableSerialCount,
+        stockContext.totalQuantity - stockContext.availableSerialCount,
         0
       );
-      const nextStatus = nextTotalQuantity <= 5 ? "Low Stock" : "Available";
+      const nextStatus =
+        stockContext.totalQuantity <= 5 ? "Low Stock" : "Available";
 
-      db.prepare(
-        `
-          UPDATE hq_stock_items
-          SET
-            category = ?,
-            totalQuantity = ?,
-            serializedUnits = ?,
-            nonSerializedUnits = ?,
-            supplierName = ?,
-            lastArrivalDate = ?,
-            status = ?
-          WHERE stockId = ?
-        `
-      ).run(
-        line.category,
-        nextTotalQuantity,
-        availableSerialCount,
+      updateStockItem.run(
+        stockContext.category,
+        stockContext.totalQuantity,
+        stockContext.availableSerialCount,
         nonSerializedUnits,
         supplier.name,
         arrivalDate,
         nextStatus,
-        stockId
+        stockContext.stockId
       );
 
       insertStockMovement.run(
         `${createdReceipt.receiptId}-MOVE-${String(line.lineNumber).padStart(3, "0")}`,
-        stockId,
+        stockContext.stockId,
         line.itemName,
         line.quantity,
         arrivalDate,
@@ -1257,4 +1431,118 @@ export const createReceivingReceiptData = (
   }
 
   return createdReceipt;
+};
+
+const getNextReceiptAttachmentSequence = (receiptId: string) => {
+  const rows = db
+    .prepare(
+      `
+        SELECT attachmentId
+        FROM attachments
+        WHERE entityType = 'receiving_receipt' AND entityId = ?
+      `
+    )
+    .all(receiptId) as Array<{ attachmentId: string }>;
+
+  return rows.reduce((highestSequence, row) => {
+    const match = row.attachmentId.match(/-ATT-(\d+)$/);
+    const sequence = match ? Number(match[1]) : 0;
+
+    return Number.isFinite(sequence) && sequence > highestSequence
+      ? sequence
+      : highestSequence;
+  }, 0);
+};
+
+export const appendReceivingReceiptAttachmentsData = (
+  receiptId: string,
+  uploadedAttachments: UploadedReceiptAttachment[] = []
+): ReceivingReceiptDetail => {
+  const existingReceipt = getReceivingReceiptByIdData(receiptId);
+
+  if (!existingReceipt) {
+    throw new Error("Receipt not found");
+  }
+
+  if (uploadedAttachments.length === 0) {
+    throw new Error("At least one attachment is required");
+  }
+
+  const nextAttachmentSequence = getNextReceiptAttachmentSequence(receiptId);
+  const insertAttachment = db.prepare(
+    `
+      INSERT INTO attachments (
+        attachmentId,
+        entityType,
+        entityId,
+        originalName,
+        storedName,
+        storagePath,
+        mimeType,
+        fileSize,
+        uploadedAt
+      ) VALUES (?, 'receiving_receipt', ?, ?, ?, ?, ?, ?, ?)
+    `
+  );
+
+  db.exec("BEGIN");
+
+  try {
+    uploadedAttachments.forEach((attachment, index) => {
+      const attachmentId = `${receiptId}-ATT-${String(
+        nextAttachmentSequence + index + 1
+      ).padStart(3, "0")}`;
+
+      insertAttachment.run(
+        attachmentId,
+        receiptId,
+        attachment.originalName,
+        attachment.storedName,
+        attachment.storagePath,
+        attachment.mimeType,
+        attachment.fileSize,
+        new Date().toISOString()
+      );
+    });
+
+    updateReceiptDocumentState(
+      receiptId,
+      deriveReceiptDocumentState(
+        "Pending Review",
+        existingReceipt.attachments.length + uploadedAttachments.length
+      )
+    );
+
+    db.exec("COMMIT");
+  } catch (error) {
+    db.exec("ROLLBACK");
+    throw error;
+  }
+
+  return getReceivingReceiptByIdData(receiptId) as ReceivingReceiptDetail;
+};
+
+export const verifyReceivingReceiptData = (
+  receiptId: string
+): ReceivingReceiptDetail => {
+  const existingReceipt = getReceivingReceiptByIdData(receiptId);
+
+  if (!existingReceipt) {
+    throw new Error("Receipt not found");
+  }
+
+  if (existingReceipt.attachments.length === 0) {
+    throw new Error("Receipt has no attachments to verify");
+  }
+
+  if (existingReceipt.documentStatus === "Complete") {
+    throw new Error("Receipt is already verified");
+  }
+
+  updateReceiptDocumentState(
+    receiptId,
+    deriveReceiptDocumentState("Complete", existingReceipt.attachments.length)
+  );
+
+  return getReceivingReceiptByIdData(receiptId) as ReceivingReceiptDetail;
 };

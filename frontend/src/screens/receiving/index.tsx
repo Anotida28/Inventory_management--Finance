@@ -3,12 +3,44 @@
 import Header from "@/components/Header";
 import {
   ReceivingReceipt,
+  useAddReceivingReceiptAttachmentsMutation,
   useGetReceivingReceiptsQuery,
+  useVerifyReceivingReceiptMutation,
 } from "@/services/api";
 import { DataGrid, GridColDef } from "@mui/x-data-grid";
+import { FileCheck2, Paperclip, Upload } from "lucide-react";
 import numeral from "numeral";
+import { useEffect, useMemo, useRef, useState } from "react";
 import BatchReceiptPanel from "./BatchReceiptPanel";
 import ManualReceiptPanel from "./ManualReceiptPanel";
+
+const documentStatusClasses: Record<ReceivingReceipt["documentStatus"], string> = {
+  Complete: "bg-green-100 text-green-700",
+  "Pending Review": "bg-yellow-100 text-yellow-700",
+  Missing: "bg-red-100 text-red-700",
+};
+
+const receiptStatusClasses: Record<ReceivingReceipt["status"], string> = {
+  Verified: "bg-green-100 text-green-700",
+  "Pending Review": "bg-yellow-100 text-yellow-700",
+  Logged: "bg-blue-100 text-blue-700",
+};
+
+const getMutationErrorMessage = (error: unknown, fallbackMessage: string) => {
+  if (
+    typeof error === "object" &&
+    error !== null &&
+    "data" in error &&
+    typeof error.data === "object" &&
+    error.data !== null &&
+    "message" in error.data &&
+    typeof error.data.message === "string"
+  ) {
+    return error.data.message;
+  }
+
+  return fallbackMessage;
+};
 
 const columns: GridColDef<ReceivingReceipt>[] = [
   { field: "receiptId", headerName: "Receipt", width: 140 },
@@ -26,8 +58,34 @@ const columns: GridColDef<ReceivingReceipt>[] = [
     valueGetter: (_, row) => numeral(row.totalAmount).format("$0,0.00"),
   },
   { field: "documentCount", headerName: "Docs", width: 90 },
-  { field: "documentStatus", headerName: "Documents", width: 150 },
-  { field: "status", headerName: "Status", width: 140 },
+  {
+    field: "documentStatus",
+    headerName: "Documents",
+    width: 160,
+    renderCell: ({ row }) => (
+      <span
+        className={`rounded-full px-2.5 py-1 text-xs font-medium ${
+          documentStatusClasses[row.documentStatus]
+        }`}
+      >
+        {row.documentStatus}
+      </span>
+    ),
+  },
+  {
+    field: "status",
+    headerName: "Workflow",
+    width: 150,
+    renderCell: ({ row }) => (
+      <span
+        className={`rounded-full px-2.5 py-1 text-xs font-medium ${
+          receiptStatusClasses[row.status]
+        }`}
+      >
+        {row.status}
+      </span>
+    ),
+  },
   {
     field: "attachments",
     headerName: "Attachment Links",
@@ -63,6 +121,101 @@ const columns: GridColDef<ReceivingReceipt>[] = [
 
 const Receiving = () => {
   const { data: receipts, isLoading, isError } = useGetReceivingReceiptsQuery();
+  const [addReceivingReceiptAttachments, { isLoading: isUploadingDocuments }] =
+    useAddReceivingReceiptAttachmentsMutation();
+  const [verifyReceivingReceipt, { isLoading: isVerifyingReceipt }] =
+    useVerifyReceivingReceiptMutation();
+  const [selectedReceiptId, setSelectedReceiptId] = useState<string | null>(null);
+  const [attachmentFiles, setAttachmentFiles] = useState<File[]>([]);
+  const [actionError, setActionError] = useState<string | null>(null);
+  const [actionSuccess, setActionSuccess] = useState<string | null>(null);
+  const fileInputRef = useRef<HTMLInputElement | null>(null);
+
+  useEffect(() => {
+    if (!receipts || receipts.length === 0) {
+      setSelectedReceiptId(null);
+      return;
+    }
+
+    if (
+      !selectedReceiptId ||
+      !receipts.some((receipt) => receipt.receiptId === selectedReceiptId)
+    ) {
+      setSelectedReceiptId(receipts[0].receiptId);
+    }
+  }, [receipts, selectedReceiptId]);
+
+  const selectedReceipt = useMemo(
+    () =>
+      receipts?.find((receipt) => receipt.receiptId === selectedReceiptId) ?? null,
+    [receipts, selectedReceiptId]
+  );
+
+  const batchCount = receipts?.filter((receipt) => receipt.receiptType === "Batch")
+    .length ?? 0;
+  const singleItemCount = receipts ? receipts.length - batchCount : 0;
+  const pendingDocuments =
+    receipts?.filter((receipt) => receipt.documentStatus !== "Complete").length ?? 0;
+  const totalValue =
+    receipts?.reduce((sum, receipt) => sum + receipt.totalAmount, 0) ?? 0;
+
+  const handleUploadDocuments = async () => {
+    if (!selectedReceipt || attachmentFiles.length === 0) {
+      return;
+    }
+
+    setActionError(null);
+    setActionSuccess(null);
+
+    try {
+      const payload = new FormData();
+      attachmentFiles.forEach((file) => payload.append("attachments", file));
+
+      const wasVerified = selectedReceipt.documentStatus === "Complete";
+      const updatedReceipt = await addReceivingReceiptAttachments({
+        receiptId: selectedReceipt.receiptId,
+        payload,
+      }).unwrap();
+
+      setSelectedReceiptId(updatedReceipt.receiptId);
+      setAttachmentFiles([]);
+      if (fileInputRef.current) {
+        fileInputRef.current.value = "";
+      }
+
+      setActionSuccess(
+        wasVerified
+          ? `Documents updated for ${updatedReceipt.receiptId}. The receipt has been moved back to pending review.`
+          : `Documents uploaded for ${updatedReceipt.receiptId}. The receipt is ready for verification after review.`
+      );
+    } catch (error) {
+      setActionError(
+        getMutationErrorMessage(error, "Unable to upload receipt documents.")
+      );
+    }
+  };
+
+  const handleVerifyDocuments = async () => {
+    if (!selectedReceipt) {
+      return;
+    }
+
+    setActionError(null);
+    setActionSuccess(null);
+
+    try {
+      const updatedReceipt = await verifyReceivingReceipt(
+        selectedReceipt.receiptId
+      ).unwrap();
+
+      setSelectedReceiptId(updatedReceipt.receiptId);
+      setActionSuccess(`Receipt ${updatedReceipt.receiptId} has been verified.`);
+    } catch (error) {
+      setActionError(
+        getMutationErrorMessage(error, "Unable to verify receipt documents.")
+      );
+    }
+  };
 
   if (isLoading) {
     return <div className="py-4">Loading...</div>;
@@ -75,18 +228,6 @@ const Receiving = () => {
       </div>
     );
   }
-
-  const batchCount = receipts.filter(
-    (receipt) => receipt.receiptType === "Batch"
-  ).length;
-  const singleItemCount = receipts.length - batchCount;
-  const pendingDocuments = receipts.filter(
-    (receipt) => receipt.documentStatus !== "Complete"
-  ).length;
-  const totalValue = receipts.reduce(
-    (sum, receipt) => sum + receipt.totalAmount,
-    0
-  );
 
   return (
     <div className="space-y-6 pb-5">
@@ -125,12 +266,215 @@ const Receiving = () => {
         </div>
       </div>
 
+      <div className="bg-white shadow rounded-2xl border border-gray-100 p-5">
+        <div className="flex flex-col gap-4 xl:flex-row xl:items-start xl:justify-between">
+          <div>
+            <p className="text-sm text-gray-500">Selected Receipt</p>
+            <h2 className="text-xl font-semibold text-gray-800 mt-1">
+              {selectedReceipt?.receiptId ?? "Choose a receipt from the register"}
+            </h2>
+            <p className="text-sm text-gray-500 mt-1">
+              Add documents after logging the receipt, then verify them here.
+            </p>
+          </div>
+
+          {selectedReceipt && (
+            <div className="flex flex-wrap gap-2">
+              <span
+                className={`rounded-full px-3 py-1 text-xs font-medium ${
+                  documentStatusClasses[selectedReceipt.documentStatus]
+                }`}
+              >
+                Documents: {selectedReceipt.documentStatus}
+              </span>
+              <span
+                className={`rounded-full px-3 py-1 text-xs font-medium ${
+                  receiptStatusClasses[selectedReceipt.status]
+                }`}
+              >
+                Workflow: {selectedReceipt.status}
+              </span>
+            </div>
+          )}
+        </div>
+
+        {selectedReceipt ? (
+          <>
+            <div className="mt-5 grid grid-cols-1 md:grid-cols-4 gap-4">
+              <div className="rounded-2xl border border-gray-100 p-4">
+                <p className="text-sm text-gray-500">Supplier</p>
+                <p className="mt-2 font-semibold text-gray-800">
+                  {selectedReceipt.supplierName}
+                </p>
+              </div>
+              <div className="rounded-2xl border border-gray-100 p-4">
+                <p className="text-sm text-gray-500">Arrival Date</p>
+                <p className="mt-2 font-semibold text-gray-800">
+                  {selectedReceipt.arrivalDate}
+                </p>
+              </div>
+              <div className="rounded-2xl border border-gray-100 p-4">
+                <p className="text-sm text-gray-500">Documents on File</p>
+                <p className="mt-2 font-semibold text-gray-800">
+                  {selectedReceipt.documentCount}
+                </p>
+              </div>
+              <div className="rounded-2xl border border-gray-100 p-4">
+                <p className="text-sm text-gray-500">Receipt Value</p>
+                <p className="mt-2 font-semibold text-gray-800">
+                  {numeral(selectedReceipt.totalAmount).format("$0,0.00")}
+                </p>
+              </div>
+            </div>
+
+            <div className="mt-5 grid grid-cols-1 xl:grid-cols-[1.1fr,0.9fr] gap-4">
+              <div className="rounded-2xl border border-gray-100 p-5">
+                <div className="flex items-center gap-3">
+                  <div className="rounded-full p-3 bg-blue-50 border border-blue-100">
+                    <Upload className="w-5 h-5 text-blue-600" />
+                  </div>
+                  <div>
+                    <p className="font-semibold text-gray-700">
+                      Add Supporting Documents
+                    </p>
+                    <p className="text-sm text-gray-500">
+                      Upload paperwork for the selected receipt. Any new upload
+                      sends the receipt back into pending review.
+                    </p>
+                  </div>
+                </div>
+
+                <div className="mt-4">
+                  <input
+                    ref={fileInputRef}
+                    type="file"
+                    multiple
+                    accept=".pdf,.jpg,.jpeg,.png,.doc,.docx,.xls,.xlsx"
+                    className="block w-full p-2.5 border border-gray-300 rounded-md bg-white text-gray-700 focus:outline-none focus:border-blue-500"
+                    onChange={(event) =>
+                      setAttachmentFiles(Array.from(event.target.files ?? []))
+                    }
+                  />
+                  {attachmentFiles.length > 0 && (
+                    <div className="mt-2 space-y-1 text-sm text-gray-500">
+                      <p>{attachmentFiles.length} attachment(s) selected</p>
+                      {attachmentFiles.map((file) => (
+                        <p key={`${file.name}-${file.size}`} className="truncate">
+                          {file.name}
+                        </p>
+                      ))}
+                    </div>
+                  )}
+                </div>
+
+                <div className="mt-4 flex flex-wrap items-center gap-3">
+                  <button
+                    type="button"
+                    onClick={handleUploadDocuments}
+                    disabled={isUploadingDocuments || attachmentFiles.length === 0}
+                    className="px-4 py-2 bg-blue-500 text-white rounded hover:bg-blue-700 disabled:opacity-60"
+                  >
+                    {isUploadingDocuments ? "Uploading..." : "Upload Documents"}
+                  </button>
+                  <button
+                    type="button"
+                    onClick={handleVerifyDocuments}
+                    disabled={
+                      isVerifyingReceipt ||
+                      selectedReceipt.attachments.length === 0 ||
+                      selectedReceipt.documentStatus === "Complete"
+                    }
+                    className="px-4 py-2 bg-emerald-600 text-white rounded hover:bg-emerald-700 disabled:opacity-60"
+                  >
+                    {isVerifyingReceipt ? "Verifying..." : "Verify Documents"}
+                  </button>
+                </div>
+
+                {(actionError || actionSuccess) && (
+                  <div className="mt-4">
+                    {actionError && (
+                      <p className="text-sm text-red-500">{actionError}</p>
+                    )}
+                    {actionSuccess && (
+                      <p className="text-sm text-emerald-600">{actionSuccess}</p>
+                    )}
+                  </div>
+                )}
+              </div>
+
+              <div className="rounded-2xl border border-gray-100 p-5">
+                <div className="flex items-center gap-3">
+                  <div className="rounded-full p-3 bg-blue-50 border border-blue-100">
+                    <Paperclip className="w-5 h-5 text-blue-600" />
+                  </div>
+                  <div>
+                    <p className="font-semibold text-gray-700">Current Documents</p>
+                    <p className="text-sm text-gray-500">
+                      Files already attached to this receipt.
+                    </p>
+                  </div>
+                </div>
+
+                <div className="mt-4 space-y-3">
+                  {selectedReceipt.attachments.length > 0 ? (
+                    selectedReceipt.attachments.map((attachment) => (
+                      <a
+                        key={attachment.attachmentId}
+                        href={attachment.downloadUrl}
+                        target="_blank"
+                        rel="noreferrer"
+                        className="block rounded-xl border border-gray-100 px-4 py-3 hover:border-blue-200 hover:bg-blue-50/40"
+                      >
+                        <p className="text-sm font-medium text-gray-700">
+                          {attachment.originalName}
+                        </p>
+                        <p className="text-xs text-gray-400 mt-1">
+                          Uploaded {new Date(attachment.uploadedAt).toLocaleString()}
+                        </p>
+                      </a>
+                    ))
+                  ) : (
+                    <div className="rounded-xl border border-dashed border-gray-200 px-4 py-6 text-sm text-gray-500">
+                      No documents are attached yet. Upload the receipt pack here
+                      when paperwork becomes available.
+                    </div>
+                  )}
+
+                  <div className="rounded-xl border border-amber-100 bg-amber-50/70 px-4 py-3">
+                    <div className="flex items-start gap-3">
+                      <FileCheck2 className="w-4 h-4 text-amber-600 mt-0.5" />
+                      <p className="text-sm text-amber-800">
+                        Verification is a separate step. A receipt only becomes
+                        complete after its uploaded documents have been reviewed.
+                      </p>
+                    </div>
+                  </div>
+                </div>
+              </div>
+            </div>
+          </>
+        ) : (
+          <p className="mt-4 text-sm text-gray-500">
+            Select a receipt row below to manage its documents.
+          </p>
+        )}
+      </div>
+
       <DataGrid
         rows={receipts}
         columns={columns}
         getRowId={(row) => row.receiptId}
-        checkboxSelection
+        onRowClick={(params) => setSelectedReceiptId(String(params.row.receiptId))}
         disableRowSelectionOnClick
+        initialState={{
+          pagination: {
+            paginationModel: {
+              page: 0,
+              pageSize: 10,
+            },
+          },
+        }}
+        pageSizeOptions={[10, 25, 50]}
         className="bg-white shadow rounded-lg border border-gray-200 !text-gray-700"
       />
     </div>

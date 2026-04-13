@@ -12,11 +12,13 @@ import {
   getSuppliersData,
 } from "../lib/operationsData";
 import {
+  appendReceivingReceiptAttachmentsData,
   createReceivingReceiptData,
   getOperationAttachmentByIdData,
   getReceivingOptionsData,
   getReceivingReceiptByIdData,
   getReceivingReceiptsWithAttachmentsData,
+  verifyReceivingReceiptData,
 } from "../lib/receivingData";
 import {
   mapUploadedIssueFiles,
@@ -131,6 +133,8 @@ export const createReceivingReceipt = async (
       message === "Missing required receipt fields" ||
       message === "Invalid receipt type" ||
       message === "Invalid document status" ||
+      message ===
+        "Receipts cannot be created as complete. Upload documents first, then verify the receipt after review." ||
       message === "Single item receipts can only contain one line" ||
       message === "Each item can only appear once per receipt" ||
       message === "Supplier was not found" ||
@@ -150,6 +154,71 @@ export const createReceivingReceipt = async (
     }
 
     res.status(500).json({ message: "Error creating receipt" });
+  }
+};
+
+export const addReceivingReceiptAttachments = async (
+  req: Request,
+  res: Response
+): Promise<void> => {
+  const receiptRequest = req as ReceiptRequest;
+  const uploadedFiles = Array.isArray(receiptRequest.files)
+    ? receiptRequest.files
+    : [];
+
+  try {
+    const updatedReceipt = appendReceivingReceiptAttachmentsData(
+      req.params.receiptId,
+      mapUploadedReceiptFiles(uploadedFiles)
+    );
+
+    res.json(updatedReceipt);
+  } catch (error) {
+    removeUploadedReceiptFiles(uploadedFiles);
+
+    const message = getErrorMessage(error);
+
+    if (message === "Receipt not found") {
+      res.status(404).json({ message });
+      return;
+    }
+
+    if (message === "At least one attachment is required") {
+      res.status(400).json({ message });
+      return;
+    }
+
+    res.status(500).json({ message: "Error uploading receipt attachments" });
+  }
+};
+
+export const verifyReceivingReceipt = async (
+  req: Request,
+  res: Response
+): Promise<void> => {
+  try {
+    const updatedReceipt = verifyReceivingReceiptData(req.params.receiptId);
+
+    res.json(updatedReceipt);
+  } catch (error) {
+    const message = getErrorMessage(error);
+
+    if (message === "Receipt not found") {
+      res.status(404).json({ message });
+      return;
+    }
+
+    if (message === "Receipt has no attachments to verify") {
+      res.status(400).json({ message });
+      return;
+    }
+
+    if (message === "Receipt is already verified") {
+      res.status(409).json({ message });
+      return;
+    }
+
+    res.status(500).json({ message: "Error verifying receipt documents" });
   }
 };
 

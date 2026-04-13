@@ -85,9 +85,9 @@ const Dashboard = () => {
     },
     {
       title: "Document Exceptions",
-      value: data.documentsPendingReview.toString(),
-      description: `${data.documentQueue.length} items in audit queue`,
-      helper: "Receipts and issues needing document attention",
+      value: data.documentExceptions.toString(),
+      description: `${data.missingDocumentItems} missing, ${data.documentsPendingReview} awaiting review`,
+      helper: `Showing ${data.documentQueue.length} of ${data.documentQueueTotal} audit queue items`,
       Icon: ShieldAlert,
     },
     {
@@ -241,6 +241,9 @@ const Dashboard = () => {
               </h2>
               <p className="text-sm text-gray-400">
                 Receipts and issue records that still need documentation work.
+                {data.documentQueueTotal > data.documentQueue.length
+                  ? ` Showing the latest ${data.documentQueue.length} of ${data.documentQueueTotal}.`
+                  : ""}
               </p>
             </div>
           </div>
