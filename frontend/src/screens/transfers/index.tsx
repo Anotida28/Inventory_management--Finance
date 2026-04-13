@@ -555,7 +555,7 @@ const Transfers = () => {
               </select>
             </div>
 
-            {formData.destinationType === "Branch" ? (
+            {formData.destinationType === "Branch" && (
               <div>
                 <label className={labelClassName}>Destination Branch</label>
                 <select
@@ -576,22 +576,6 @@ const Transfers = () => {
                     </option>
                   ))}
                 </select>
-              </div>
-            ) : (
-              <div>
-                <label className={labelClassName}>Issued To</label>
-                <input
-                  className={inputClassName}
-                  value={formData.issuedTo}
-                  onChange={(event) =>
-                    setFormData((current) => ({
-                      ...current,
-                      issuedTo: event.target.value,
-                    }))
-                  }
-                  placeholder="Person name"
-                  required
-                />
               </div>
             )}
 
