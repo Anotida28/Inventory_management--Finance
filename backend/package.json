@@ -7,7 +7,8 @@
     "test": "npm run build && node scripts/authWorkflowRegression.js && node scripts/returnFlowRegression.js && node scripts/receiptDocumentWorkflowRegression.js",
     "build": "rimraf dist && npx tsc",
     "start": "npm run build && node dist/index.js",
-    "dev": "npm run build && concurrently \"npx tsc -w\" \"nodemon --exec ts-node src/index.ts\""
+    "dev": "npm run build && concurrently \"npx tsc -w\" \"nodemon --exec ts-node src/index.ts\"",
+    "db:init:sqlserver": "node scripts/initSqlServerSchema.js"
   },
   "keywords": [],
   "author": "",
@@ -23,6 +24,7 @@
     "helmet": "^7.1.0",
     "jsonwebtoken": "^9.0.3",
     "morgan": "^1.10.0",
+    "mssql": "^12.2.1",
     "multer": "^2.1.1",
     "prisma": "^5.16.2",
     "rimraf": "^6.0.1",

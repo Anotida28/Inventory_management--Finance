@@ -696,132 +696,134 @@ const backfillStockLocationBalancesIfNeeded = () => {
 };
 
 const initializeDatabase = () => {
-  db.exec(`
-    CREATE TABLE IF NOT EXISTS suppliers (
-      supplierId VARCHAR(64) PRIMARY KEY,
-      name VARCHAR(255) NOT NULL,
-      contactPerson VARCHAR(255) NOT NULL,
-      phone VARCHAR(64) NOT NULL,
-      email VARCHAR(255) NOT NULL,
-      categoryFocus VARCHAR(255) NOT NULL,
-      lastDeliveryDate VARCHAR(32) NOT NULL,
-      activeContracts INT NOT NULL
-    ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
-
-    CREATE TABLE IF NOT EXISTS branches (
-      branchId VARCHAR(64) PRIMARY KEY,
-      name VARCHAR(255) NOT NULL UNIQUE,
-      code VARCHAR(64) NOT NULL UNIQUE,
-      address VARCHAR(255) NOT NULL,
-      region VARCHAR(128) NOT NULL,
-      contactPerson VARCHAR(255) NOT NULL,
-      phone VARCHAR(64) NOT NULL,
-      status VARCHAR(32) NOT NULL
-    ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
-
-    CREATE TABLE IF NOT EXISTS receiving_receipts (
-      receiptId VARCHAR(64) PRIMARY KEY,
-      receiptType VARCHAR(32) NOT NULL,
-      supplierId VARCHAR(64) NOT NULL,
-      supplierName VARCHAR(255) NOT NULL,
-      arrivalDate VARCHAR(32) NOT NULL,
-      signedBy VARCHAR(255) NOT NULL,
-      receivedBy VARCHAR(255) NOT NULL,
-      itemCount INT NOT NULL,
-      totalQuantity INT NOT NULL,
-      totalAmount DOUBLE NOT NULL,
-      documentCount INT NOT NULL,
-      documentStatus VARCHAR(32) NOT NULL,
-      status VARCHAR(32) NOT NULL
-    ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
-
-    CREATE TABLE IF NOT EXISTS hq_stock_items (
-      stockId VARCHAR(64) PRIMARY KEY,
-      itemName VARCHAR(255) NOT NULL UNIQUE,
-      category VARCHAR(128) NOT NULL,
-      totalQuantity INT NOT NULL,
-      serializedUnits INT NOT NULL,
-      nonSerializedUnits INT NOT NULL,
-      supplierName VARCHAR(255) NOT NULL,
-      lastArrivalDate VARCHAR(32) NOT NULL,
-      storageLocation VARCHAR(255) NOT NULL,
-      status VARCHAR(32) NOT NULL
-    ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
-
-    CREATE TABLE IF NOT EXISTS issue_records (
-      issueId VARCHAR(64) PRIMARY KEY,
-      itemName VARCHAR(255) NOT NULL,
-      serialNumber VARCHAR(255) NOT NULL,
-      destinationType VARCHAR(32) NOT NULL,
-      branchId VARCHAR(64) NULL,
-      issuedTo VARCHAR(255) NOT NULL,
-      issuedBy VARCHAR(255) NOT NULL,
-      address VARCHAR(255) NOT NULL,
-      issueDate VARCHAR(32) NOT NULL,
-      attachmentNames LONGTEXT NOT NULL,
-      notes TEXT NULL,
-      acknowledgedBy VARCHAR(255) NULL,
-      acknowledgedAt VARCHAR(32) NULL,
-      acknowledgementNotes TEXT NULL,
-      returnedBy VARCHAR(255) NULL,
-      returnedAt VARCHAR(32) NULL,
-      returnNotes TEXT NULL,
-      status VARCHAR(32) NOT NULL
-    ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
-
-    CREATE TABLE IF NOT EXISTS attachments (
-      attachmentId VARCHAR(64) PRIMARY KEY,
-      entityType VARCHAR(64) NOT NULL,
-      entityId VARCHAR(64) NOT NULL,
-      originalName VARCHAR(255) NOT NULL,
-      storedName VARCHAR(255) NOT NULL,
-      storagePath VARCHAR(512) NOT NULL,
-      mimeType VARCHAR(128) NOT NULL,
-      fileSize INT NOT NULL,
-      uploadedAt VARCHAR(32) NOT NULL
-    ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
-
-    CREATE TABLE IF NOT EXISTS hq_serial_assets (
-      assetId VARCHAR(64) PRIMARY KEY,
-      stockId VARCHAR(64) NOT NULL,
-      itemName VARCHAR(255) NOT NULL,
-      serialNumber VARCHAR(255) NOT NULL UNIQUE,
-      supplierName VARCHAR(255) NOT NULL,
-      lastArrivalDate VARCHAR(32) NOT NULL,
-      storageLocation VARCHAR(255) NOT NULL,
-      status VARCHAR(32) NOT NULL,
-      issueId VARCHAR(64) NULL
-    ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
-
-    CREATE TABLE IF NOT EXISTS stock_movements (
-      movementId VARCHAR(64) PRIMARY KEY,
-      movementType VARCHAR(64) NOT NULL,
-      stockId VARCHAR(64) NOT NULL,
-      itemName VARCHAR(255) NOT NULL,
-      quantityDelta INT NOT NULL,
-      movementDate VARCHAR(32) NOT NULL,
-      referenceType VARCHAR(64) NOT NULL,
-      referenceId VARCHAR(64) NOT NULL,
-      storageLocation VARCHAR(255) NULL,
-      serialNumbers LONGTEXT NULL,
-      notes TEXT NULL
-    ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci
-  `);
-
-  ensureStockLocationBalanceSchema(db);
-
-  migrateIssueRecordsTableIfNeeded();
-
-  const stockMovementColumns = getTableColumns("stock_movements");
-
-  if (
-    stockMovementColumns.length > 0 &&
-    !stockMovementColumns.includes("storageLocation")
-  ) {
+  if (db.dialect === "mysql") {
     db.exec(`
-      ALTER TABLE stock_movements
-      ADD COLUMN storageLocation VARCHAR(255)
+      CREATE TABLE IF NOT EXISTS suppliers (
+        supplierId VARCHAR(64) PRIMARY KEY,
+        name VARCHAR(255) NOT NULL,
+        contactPerson VARCHAR(255) NOT NULL,
+        phone VARCHAR(64) NOT NULL,
+        email VARCHAR(255) NOT NULL,
+        categoryFocus VARCHAR(255) NOT NULL,
+        lastDeliveryDate VARCHAR(32) NOT NULL,
+        activeContracts INT NOT NULL
+      ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
+
+      CREATE TABLE IF NOT EXISTS branches (
+        branchId VARCHAR(64) PRIMARY KEY,
+        name VARCHAR(255) NOT NULL UNIQUE,
+        code VARCHAR(64) NOT NULL UNIQUE,
+        address VARCHAR(255) NOT NULL,
+        region VARCHAR(128) NOT NULL,
+        contactPerson VARCHAR(255) NOT NULL,
+        phone VARCHAR(64) NOT NULL,
+        status VARCHAR(32) NOT NULL
+      ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
+
+      CREATE TABLE IF NOT EXISTS receiving_receipts (
+        receiptId VARCHAR(64) PRIMARY KEY,
+        receiptType VARCHAR(32) NOT NULL,
+        supplierId VARCHAR(64) NOT NULL,
+        supplierName VARCHAR(255) NOT NULL,
+        arrivalDate VARCHAR(32) NOT NULL,
+        signedBy VARCHAR(255) NOT NULL,
+        receivedBy VARCHAR(255) NOT NULL,
+        itemCount INT NOT NULL,
+        totalQuantity INT NOT NULL,
+        totalAmount DOUBLE NOT NULL,
+        documentCount INT NOT NULL,
+        documentStatus VARCHAR(32) NOT NULL,
+        status VARCHAR(32) NOT NULL
+      ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
+
+      CREATE TABLE IF NOT EXISTS hq_stock_items (
+        stockId VARCHAR(64) PRIMARY KEY,
+        itemName VARCHAR(255) NOT NULL UNIQUE,
+        category VARCHAR(128) NOT NULL,
+        totalQuantity INT NOT NULL,
+        serializedUnits INT NOT NULL,
+        nonSerializedUnits INT NOT NULL,
+        supplierName VARCHAR(255) NOT NULL,
+        lastArrivalDate VARCHAR(32) NOT NULL,
+        storageLocation VARCHAR(255) NOT NULL,
+        status VARCHAR(32) NOT NULL
+      ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
+
+      CREATE TABLE IF NOT EXISTS issue_records (
+        issueId VARCHAR(64) PRIMARY KEY,
+        itemName VARCHAR(255) NOT NULL,
+        serialNumber VARCHAR(255) NOT NULL,
+        destinationType VARCHAR(32) NOT NULL,
+        branchId VARCHAR(64) NULL,
+        issuedTo VARCHAR(255) NOT NULL,
+        issuedBy VARCHAR(255) NOT NULL,
+        address VARCHAR(255) NOT NULL,
+        issueDate VARCHAR(32) NOT NULL,
+        attachmentNames LONGTEXT NOT NULL,
+        notes TEXT NULL,
+        acknowledgedBy VARCHAR(255) NULL,
+        acknowledgedAt VARCHAR(32) NULL,
+        acknowledgementNotes TEXT NULL,
+        returnedBy VARCHAR(255) NULL,
+        returnedAt VARCHAR(32) NULL,
+        returnNotes TEXT NULL,
+        status VARCHAR(32) NOT NULL
+      ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
+
+      CREATE TABLE IF NOT EXISTS attachments (
+        attachmentId VARCHAR(64) PRIMARY KEY,
+        entityType VARCHAR(64) NOT NULL,
+        entityId VARCHAR(64) NOT NULL,
+        originalName VARCHAR(255) NOT NULL,
+        storedName VARCHAR(255) NOT NULL,
+        storagePath VARCHAR(512) NOT NULL,
+        mimeType VARCHAR(128) NOT NULL,
+        fileSize INT NOT NULL,
+        uploadedAt VARCHAR(32) NOT NULL
+      ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
+
+      CREATE TABLE IF NOT EXISTS hq_serial_assets (
+        assetId VARCHAR(64) PRIMARY KEY,
+        stockId VARCHAR(64) NOT NULL,
+        itemName VARCHAR(255) NOT NULL,
+        serialNumber VARCHAR(255) NOT NULL UNIQUE,
+        supplierName VARCHAR(255) NOT NULL,
+        lastArrivalDate VARCHAR(32) NOT NULL,
+        storageLocation VARCHAR(255) NOT NULL,
+        status VARCHAR(32) NOT NULL,
+        issueId VARCHAR(64) NULL
+      ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
+
+      CREATE TABLE IF NOT EXISTS stock_movements (
+        movementId VARCHAR(64) PRIMARY KEY,
+        movementType VARCHAR(64) NOT NULL,
+        stockId VARCHAR(64) NOT NULL,
+        itemName VARCHAR(255) NOT NULL,
+        quantityDelta INT NOT NULL,
+        movementDate VARCHAR(32) NOT NULL,
+        referenceType VARCHAR(64) NOT NULL,
+        referenceId VARCHAR(64) NOT NULL,
+        storageLocation VARCHAR(255) NULL,
+        serialNumbers LONGTEXT NULL,
+        notes TEXT NULL
+      ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci
     `);
+
+    ensureStockLocationBalanceSchema(db);
+
+    migrateIssueRecordsTableIfNeeded();
+
+    const stockMovementColumns = getTableColumns("stock_movements");
+
+    if (
+      stockMovementColumns.length > 0 &&
+      !stockMovementColumns.includes("storageLocation")
+    ) {
+      db.exec(`
+        ALTER TABLE stock_movements
+        ADD COLUMN storageLocation VARCHAR(255)
+      `);
+    }
   }
 
   ensureIndex("hq_serial_assets", "idx_hq_serial_assets_item_status", [

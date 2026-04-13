@@ -80,6 +80,10 @@ const isValidUsername = (value: string) =>
 const getJwtSecret = () => process.env.JWT_SECRET || "dev-secret";
 
 const ensureAuthSchema = () => {
+  if (db.dialect === "sqlserver") {
+    return;
+  }
+
   db.exec(`
     CREATE TABLE IF NOT EXISTS auth_users (
       userId VARCHAR(64) PRIMARY KEY,

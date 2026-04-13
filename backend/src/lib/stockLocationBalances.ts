@@ -47,6 +47,10 @@ const getNextStockLocationBalanceId = (db: DatabaseLike, stockId: string) => {
 };
 
 export const ensureStockLocationBalanceSchema = (db: DatabaseLike) => {
+  if (db.dialect === "sqlserver") {
+    return;
+  }
+
   db.exec(`
     CREATE TABLE IF NOT EXISTS hq_stock_location_balances (
       balanceId VARCHAR(64) PRIMARY KEY,

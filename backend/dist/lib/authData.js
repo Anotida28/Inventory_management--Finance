@@ -23,6 +23,9 @@ const isValidEmail = (value) => /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(value);
 const isValidUsername = (value) => /^[a-z0-9._-]{3,32}$/i.test(value);
 const getJwtSecret = () => process.env.JWT_SECRET || "dev-secret";
 const ensureAuthSchema = () => {
+    if (database_1.db.dialect === "sqlserver") {
+        return;
+    }
     database_1.db.exec(`
     CREATE TABLE IF NOT EXISTS auth_users (
       userId VARCHAR(64) PRIMARY KEY,

@@ -47,72 +47,74 @@ const normalizeBoolean = (value) => {
 const getPublicApiBaseUrl = () => process.env.PUBLIC_API_BASE_URL ||
     `http://localhost:${process.env.PORT || 3001}`;
 const ensureExtendedReceivingSchema = () => {
-    database_1.db.exec(`
-    CREATE TABLE IF NOT EXISTS stock_locations (
-      locationId VARCHAR(64) PRIMARY KEY,
-      locationName VARCHAR(255) NOT NULL UNIQUE
-    ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
-
-    CREATE TABLE IF NOT EXISTS receiving_receipt_lines (
-      lineId VARCHAR(96) PRIMARY KEY,
-      receiptId VARCHAR(64) NOT NULL,
-      lineNumber INT NOT NULL,
-      itemName VARCHAR(255) NOT NULL,
-      category VARCHAR(128) NOT NULL,
-      quantity INT NOT NULL,
-      unitCost DOUBLE NOT NULL,
-      totalCost DOUBLE NOT NULL,
-      storageLocation VARCHAR(255) NOT NULL,
-      isSerialized TINYINT(1) NOT NULL DEFAULT 0,
-      serialNumbers LONGTEXT NOT NULL
-    ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
-
-    CREATE TABLE IF NOT EXISTS stock_movements (
-      movementId VARCHAR(96) PRIMARY KEY,
-      movementType VARCHAR(64) NOT NULL,
-      stockId VARCHAR(64) NOT NULL,
-      itemName VARCHAR(255) NOT NULL,
-      quantityDelta INT NOT NULL,
-      movementDate VARCHAR(32) NOT NULL,
-      referenceType VARCHAR(64) NOT NULL,
-      referenceId VARCHAR(64) NOT NULL,
-      storageLocation VARCHAR(255) NULL,
-      serialNumbers LONGTEXT NULL,
-      notes TEXT NULL
-    ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
-
-    CREATE TABLE IF NOT EXISTS attachments (
-      attachmentId VARCHAR(96) PRIMARY KEY,
-      entityType VARCHAR(64) NOT NULL,
-      entityId VARCHAR(64) NOT NULL,
-      originalName VARCHAR(255) NOT NULL,
-      storedName VARCHAR(255) NOT NULL,
-      storagePath VARCHAR(512) NOT NULL,
-      mimeType VARCHAR(128) NOT NULL,
-      fileSize INT NOT NULL,
-      uploadedAt VARCHAR(32) NOT NULL
-    ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci
-  `);
-    (0, database_1.ensureIndex)("receiving_receipt_lines", "idx_receiving_receipt_lines_receipt", [
-        "receiptId",
-        "lineNumber",
-    ]);
-    (0, database_1.ensureIndex)("attachments", "idx_attachments_entity", [
-        "entityType",
-        "entityId",
-    ]);
-    (0, database_1.ensureIndex)("stock_movements", "idx_stock_movements_reference", [
-        "referenceType",
-        "referenceId",
-    ]);
-    (0, stockLocationBalances_1.ensureStockLocationBalanceSchema)(database_1.db);
-    const stockMovementColumns = getTableColumns("stock_movements");
-    if (stockMovementColumns.length > 0 &&
-        !stockMovementColumns.includes("storageLocation")) {
+    if (database_1.db.dialect === "mysql") {
         database_1.db.exec(`
-      ALTER TABLE stock_movements
-      ADD COLUMN storageLocation VARCHAR(255)
+      CREATE TABLE IF NOT EXISTS stock_locations (
+        locationId VARCHAR(64) PRIMARY KEY,
+        locationName VARCHAR(255) NOT NULL UNIQUE
+      ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
+
+      CREATE TABLE IF NOT EXISTS receiving_receipt_lines (
+        lineId VARCHAR(96) PRIMARY KEY,
+        receiptId VARCHAR(64) NOT NULL,
+        lineNumber INT NOT NULL,
+        itemName VARCHAR(255) NOT NULL,
+        category VARCHAR(128) NOT NULL,
+        quantity INT NOT NULL,
+        unitCost DOUBLE NOT NULL,
+        totalCost DOUBLE NOT NULL,
+        storageLocation VARCHAR(255) NOT NULL,
+        isSerialized TINYINT(1) NOT NULL DEFAULT 0,
+        serialNumbers LONGTEXT NOT NULL
+      ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
+
+      CREATE TABLE IF NOT EXISTS stock_movements (
+        movementId VARCHAR(96) PRIMARY KEY,
+        movementType VARCHAR(64) NOT NULL,
+        stockId VARCHAR(64) NOT NULL,
+        itemName VARCHAR(255) NOT NULL,
+        quantityDelta INT NOT NULL,
+        movementDate VARCHAR(32) NOT NULL,
+        referenceType VARCHAR(64) NOT NULL,
+        referenceId VARCHAR(64) NOT NULL,
+        storageLocation VARCHAR(255) NULL,
+        serialNumbers LONGTEXT NULL,
+        notes TEXT NULL
+      ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
+
+      CREATE TABLE IF NOT EXISTS attachments (
+        attachmentId VARCHAR(96) PRIMARY KEY,
+        entityType VARCHAR(64) NOT NULL,
+        entityId VARCHAR(64) NOT NULL,
+        originalName VARCHAR(255) NOT NULL,
+        storedName VARCHAR(255) NOT NULL,
+        storagePath VARCHAR(512) NOT NULL,
+        mimeType VARCHAR(128) NOT NULL,
+        fileSize INT NOT NULL,
+        uploadedAt VARCHAR(32) NOT NULL
+      ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci
     `);
+        (0, database_1.ensureIndex)("receiving_receipt_lines", "idx_receiving_receipt_lines_receipt", [
+            "receiptId",
+            "lineNumber",
+        ]);
+        (0, database_1.ensureIndex)("attachments", "idx_attachments_entity", [
+            "entityType",
+            "entityId",
+        ]);
+        (0, database_1.ensureIndex)("stock_movements", "idx_stock_movements_reference", [
+            "referenceType",
+            "referenceId",
+        ]);
+        (0, stockLocationBalances_1.ensureStockLocationBalanceSchema)(database_1.db);
+        const stockMovementColumns = getTableColumns("stock_movements");
+        if (stockMovementColumns.length > 0 &&
+            !stockMovementColumns.includes("storageLocation")) {
+            database_1.db.exec(`
+        ALTER TABLE stock_movements
+        ADD COLUMN storageLocation VARCHAR(255)
+      `);
+        }
     }
     const stockLocationCount = database_1.db.prepare("SELECT COUNT(*) AS count FROM stock_locations").get().count || 0;
     if (stockLocationCount === 0) {

@@ -21,6 +21,9 @@ const getNextStockLocationBalanceId = (db, stockId) => {
     return `${stockId}-LOC-${String(existingCount + 1).padStart(3, "0")}`;
 };
 const ensureStockLocationBalanceSchema = (db) => {
+    if (db.dialect === "sqlserver") {
+        return;
+    }
     db.exec(`
     CREATE TABLE IF NOT EXISTS hq_stock_location_balances (
       balanceId VARCHAR(64) PRIMARY KEY,
