@@ -397,7 +397,7 @@ const mapIssueAttachment = (row: any): IssueAttachment => ({
   mimeType: row.mimeType,
   fileSize: row.fileSize,
   uploadedAt: row.uploadedAt,
-  downloadUrl: `${getPublicApiBaseUrl()}/operations/attachments/${
+  downloadUrl: `${getPublicApiBaseUrl()}/api/operations/attachments/${
     row.attachmentId
   }/download`,
 });
@@ -1649,7 +1649,7 @@ export const createIssueRecordData = (
           mimeType: attachment.mimeType,
           fileSize: attachment.fileSize,
           uploadedAt,
-          downloadUrl: `${getPublicApiBaseUrl()}/operations/attachments/${attachmentId}/download`,
+          downloadUrl: `${getPublicApiBaseUrl()}/api/operations/attachments/${attachmentId}/download`,
         });
       });
     }

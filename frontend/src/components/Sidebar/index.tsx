@@ -65,6 +65,9 @@ const Sidebar = () => {
   const isSidebarCollapsed = useAppSelector(
     (state) => state.global.isSidebarCollapsed
   );
+  const currentUser = useAppSelector((state) => state.auth.user);
+  const canManageUsers =
+    currentUser?.role === "ADMIN" || currentUser?.role === "SUPER_ADMIN";
 
   const toggleSidebar = () => {
     dispatch(setIsSidebarCollapsed(!isSidebarCollapsed));
@@ -137,12 +140,14 @@ const Sidebar = () => {
           label="Suppliers"
           isCollapsed={isSidebarCollapsed}
         />
-        <SidebarLink
-          href="/users"
-          icon={User}
-          label="Users"
-          isCollapsed={isSidebarCollapsed}
-        />
+        {canManageUsers ? (
+          <SidebarLink
+            href="/users"
+            icon={User}
+            label="Users"
+            isCollapsed={isSidebarCollapsed}
+          />
+        ) : null}
         <SidebarLink
           href="/settings"
           icon={SlidersHorizontal}
@@ -153,6 +158,17 @@ const Sidebar = () => {
 
       {/* FOOTER */}
       <div className={`${isSidebarCollapsed ? "hidden" : "block"} mb-10`}>
+        {currentUser ? (
+          <div className="mx-6 mb-4 rounded-2xl border border-gray-100 bg-gray-50 px-4 py-3">
+            <p className="text-xs uppercase tracking-[0.18em] text-gray-400">
+              Signed in as
+            </p>
+            <p className="mt-2 text-sm font-semibold text-gray-800">
+              {currentUser.name}
+            </p>
+            <p className="mt-1 text-xs text-gray-500">{currentUser.email}</p>
+          </div>
+        ) : null}
         <p className="text-center text-xs text-gray-500">
           &copy; 2026 OMDS Inventory
         </p>

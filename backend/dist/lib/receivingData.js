@@ -145,7 +145,7 @@ const mapReceiptAttachment = (row) => ({
     mimeType: row.mimeType,
     fileSize: row.fileSize,
     uploadedAt: row.uploadedAt,
-    downloadUrl: `${getPublicApiBaseUrl()}/operations/attachments/${row.attachmentId}/download`,
+    downloadUrl: `${getPublicApiBaseUrl()}/api/operations/attachments/${row.attachmentId}/download`,
 });
 const mapOperationAttachment = (row) => ({
     attachmentId: row.attachmentId,
@@ -157,7 +157,7 @@ const mapOperationAttachment = (row) => ({
     mimeType: row.mimeType,
     fileSize: row.fileSize,
     uploadedAt: row.uploadedAt,
-    downloadUrl: `${getPublicApiBaseUrl()}/operations/attachments/${row.attachmentId}/download`,
+    downloadUrl: `${getPublicApiBaseUrl()}/api/operations/attachments/${row.attachmentId}/download`,
 });
 const mapReceivingReceiptLine = (row) => ({
     lineId: row.lineId,
@@ -900,7 +900,7 @@ const createReceivingReceiptData = (newReceipt, uploadedAttachments = []) => {
                 mimeType: attachment.mimeType,
                 fileSize: attachment.fileSize,
                 uploadedAt,
-                downloadUrl: `${getPublicApiBaseUrl()}/operations/attachments/${attachmentId}/download`,
+                downloadUrl: `${getPublicApiBaseUrl()}/api/operations/attachments/${attachmentId}/download`,
             });
         });
         db.exec("COMMIT");

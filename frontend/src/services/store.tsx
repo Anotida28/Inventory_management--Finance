@@ -1,3 +1,5 @@
+"use client";
+
 import { useRef } from "react";
 import { combineReducers, configureStore } from "@reduxjs/toolkit";
 import {
@@ -8,6 +10,7 @@ import {
 } from "react-redux";
 import globalReducer from "@/services/uiSlice";
 import { api } from "@/services/api";
+import authReducer from "@/services/authSlice";
 import { setupListeners } from "@reduxjs/toolkit/query";
 
 import {
@@ -46,10 +49,11 @@ const storage =
 const persistConfig = {
   key: "root",
   storage,
-  whitelist: ["global"],
+  whitelist: ["global", "auth"],
 };
 const rootReducer = combineReducers({
   global: globalReducer,
+  auth: authReducer,
   [api.reducerPath]: api.reducer,
 });
 const persistedReducer = persistReducer(persistConfig, rootReducer);

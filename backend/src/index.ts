@@ -5,8 +5,10 @@ import cors from "cors";
 import helmet from "helmet";
 import morgan from "morgan";
 /* ROUTE IMPORTS */
+import authRoutes from "./routes/authRoutes";
 import operationsRoutes from "./routes/operationsRoutes";
 import userRoutes from "./routes/userRoutes";
+import { requireAuth } from "./middleware/authMiddleware";
 
 /* CONFIGURATIONS */
 dotenv.config();
@@ -20,8 +22,12 @@ app.use(bodyParser.urlencoded({ extended: false }));
 app.use(cors());
 
 /* ROUTES */
-app.use("/operations", operationsRoutes); // http://localhost:8000/operations
-app.use("/users", userRoutes); // http://localhost:8000/users
+app.use("/api/auth", authRoutes);
+app.use("/api/operations", requireAuth, operationsRoutes);
+app.use("/api/users", requireAuth, userRoutes);
+
+app.use("/operations", requireAuth, operationsRoutes);
+app.use("/users", requireAuth, userRoutes);
 
 /* SERVER */
 const port = Number(process.env.PORT) || 3001;

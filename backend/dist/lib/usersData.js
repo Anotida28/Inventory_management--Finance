@@ -1,37 +1,6 @@
 "use strict";
 Object.defineProperty(exports, "__esModule", { value: true });
-exports.getUsersData = void 0;
-const users = [
-    {
-        userId: "USR-001",
-        name: "Rudo Moyo",
-        email: "rudo.moyo@omari.co.zw",
-    },
-    {
-        userId: "USR-002",
-        name: "Tawanda Chikore",
-        email: "tawanda.chikore@omari.co.zw",
-    },
-    {
-        userId: "USR-003",
-        name: "Nyasha Sibanda",
-        email: "nyasha.sibanda@omari.co.zw",
-    },
-    {
-        userId: "USR-004",
-        name: "Tanaka Dube",
-        email: "tanaka.dube@omari.co.zw",
-    },
-    {
-        userId: "USR-005",
-        name: "Faith Ncube",
-        email: "faith.ncube@omari.co.zw",
-    },
-    {
-        userId: "USR-006",
-        name: "Kundai Mpofu",
-        email: "kundai.mpofu@omari.co.zw",
-    },
-];
-const getUsersData = () => users;
-exports.getUsersData = getUsersData;
+exports.getUsersData = exports.createUserData = void 0;
+var authData_1 = require("./authData");
+Object.defineProperty(exports, "createUserData", { enumerable: true, get: function () { return authData_1.createUserData; } });
+Object.defineProperty(exports, "getUsersData", { enumerable: true, get: function () { return authData_1.listUsersData; } });

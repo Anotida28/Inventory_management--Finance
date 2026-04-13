@@ -15,8 +15,8 @@ body,
   height: 100%;
   width: 100%;
   @apply text-sm;
-  @apply bg-gray-500;
-  @apply text-gray-900;
+  @apply bg-slate-100;
+  @apply text-slate-900;
 }
 
 @media (min-width: 768px) {

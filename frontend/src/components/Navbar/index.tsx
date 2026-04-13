@@ -1,18 +1,23 @@
 "use client";
 
+import { clearAuthSession } from "@/lib/authSession";
+import { clearCredentials } from "@/services/authSlice";
 import { useAppDispatch, useAppSelector } from "@/services/store";
 import { setIsDarkMode, setIsSidebarCollapsed } from "@/services/uiSlice";
-import { Bell, Menu, Moon, Settings, Sun } from "lucide-react";
+import { Bell, LogOut, Menu, Moon, Settings, Sun } from "lucide-react";
 import Image from "next/image";
 import Link from "next/link";
+import { useRouter } from "next/navigation";
 import React from "react";
 
 const Navbar = () => {
   const dispatch = useAppDispatch();
+  const router = useRouter();
   const isSidebarCollapsed = useAppSelector(
     (state) => state.global.isSidebarCollapsed
   );
   const isDarkMode = useAppSelector((state) => state.global.isDarkMode);
+  const currentUser = useAppSelector((state) => state.auth.user);
 
   const toggleSidebar = () => {
     dispatch(setIsSidebarCollapsed(!isSidebarCollapsed));
@@ -20,6 +25,12 @@ const Navbar = () => {
 
   const toggleDarkMode = () => {
     dispatch(setIsDarkMode(!isDarkMode));
+  };
+
+  const logout = () => {
+    clearAuthSession();
+    dispatch(clearCredentials());
+    router.replace("/login");
   };
 
   return (
@@ -65,7 +76,7 @@ const Navbar = () => {
             </span>
           </div>
           <hr className="w-0 h-7 border border-solid border-l border-gray-300 mx-3" />
-          <div className="flex items-center gap-3 cursor-pointer">
+          <div className="flex items-center gap-3">
             <Image
               src="https://s3-inventorymanagement.s3.amazonaws.com/profile.jpg"
               alt="Profile"
@@ -73,12 +84,37 @@ const Navbar = () => {
               height={50}
               className="rounded-full h-full object-cover"
             />
-            <span className="font-semibold">OMDS Operations</span>
+            <div>
+              <p className="font-semibold text-gray-800">
+                {currentUser?.name ?? "Inventory User"}
+              </p>
+              <p className="text-xs uppercase tracking-[0.18em] text-gray-400">
+                {currentUser?.role ?? "Session"}
+              </p>
+            </div>
           </div>
+          <button
+            type="button"
+            onClick={logout}
+            className="inline-flex items-center gap-2 rounded-full border border-gray-200 px-3 py-2 text-sm font-medium text-gray-600 transition hover:border-rose-200 hover:bg-rose-50 hover:text-rose-600"
+          >
+            <LogOut className="h-4 w-4" />
+            Log out
+          </button>
         </div>
-        <Link href="/settings">
-          <Settings className="cursor-pointer text-gray-500" size={24} />
-        </Link>
+        <div className="flex items-center gap-4">
+          <button
+            type="button"
+            onClick={logout}
+            className="md:hidden text-gray-500 transition hover:text-rose-600"
+            aria-label="Log out"
+          >
+            <LogOut size={22} />
+          </button>
+          <Link href="/settings">
+            <Settings className="cursor-pointer text-gray-500" size={24} />
+          </Link>
+        </div>
       </div>
     </div>
   );

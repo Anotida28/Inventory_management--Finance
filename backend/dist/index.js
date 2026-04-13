@@ -10,8 +10,10 @@ const cors_1 = __importDefault(require("cors"));
 const helmet_1 = __importDefault(require("helmet"));
 const morgan_1 = __importDefault(require("morgan"));
 /* ROUTE IMPORTS */
+const authRoutes_1 = __importDefault(require("./routes/authRoutes"));
 const operationsRoutes_1 = __importDefault(require("./routes/operationsRoutes"));
 const userRoutes_1 = __importDefault(require("./routes/userRoutes"));
+const authMiddleware_1 = require("./middleware/authMiddleware");
 /* CONFIGURATIONS */
 dotenv_1.default.config();
 const app = (0, express_1.default)();
@@ -23,8 +25,11 @@ app.use(body_parser_1.default.json());
 app.use(body_parser_1.default.urlencoded({ extended: false }));
 app.use((0, cors_1.default)());
 /* ROUTES */
-app.use("/operations", operationsRoutes_1.default); // http://localhost:8000/operations
-app.use("/users", userRoutes_1.default); // http://localhost:8000/users
+app.use("/api/auth", authRoutes_1.default);
+app.use("/api/operations", authMiddleware_1.requireAuth, operationsRoutes_1.default);
+app.use("/api/users", authMiddleware_1.requireAuth, userRoutes_1.default);
+app.use("/operations", authMiddleware_1.requireAuth, operationsRoutes_1.default);
+app.use("/users", authMiddleware_1.requireAuth, userRoutes_1.default);
 /* SERVER */
 const port = Number(process.env.PORT) || 3001;
 app.listen(port, "0.0.0.0", () => {

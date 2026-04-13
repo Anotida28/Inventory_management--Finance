@@ -1,10 +1,61 @@
-import { createApi, fetchBaseQuery } from "@reduxjs/toolkit/query/react";
+import {
+  BaseQueryFn,
+  FetchArgs,
+  FetchBaseQueryError,
+  createApi,
+  fetchBaseQuery,
+} from "@reduxjs/toolkit/query/react";
+import { clearAuthSession } from "@/lib/authSession";
+import { clearCredentials } from "./authSlice";
+import type { RootState } from "./store";
 
-export interface User {
+export type UserRole = "SUPER_ADMIN" | "ADMIN" | "USER" | "VIEWER";
+
+export interface AuthUser {
   userId: string;
+  username: string;
   name: string;
   email: string;
+  role: UserRole;
+  status: "Active" | "Disabled";
+  createdAt: string;
+  updatedAt: string;
+  lastLogin?: string;
 }
+
+export interface AuthResponse {
+  accessToken: string;
+  tokenType: "Bearer";
+  expiresIn: number;
+  user: AuthUser;
+}
+
+export interface LoginRequest {
+  username: string;
+  password: string;
+}
+
+export interface RegisterInitialUserRequest {
+  username: string;
+  name: string;
+  email: string;
+  password: string;
+}
+
+export interface AuthBootstrapStatus {
+  userCount: number;
+  requiresSetup: boolean;
+}
+
+export interface CreateUserRequest {
+  username: string;
+  name: string;
+  email: string;
+  password: string;
+  role: UserRole;
+}
+
+export type User = AuthUser;
 
 export interface OperationsOverview {
   receiptsThisMonth: number;
@@ -293,10 +344,48 @@ export interface Supplier {
   activeContracts: number;
 }
 
+const resolveApiBaseUrl = (baseUrl: string | undefined) => {
+  const normalizedBaseUrl = (baseUrl || "http://localhost:3001").replace(
+    /\/+$/,
+    ""
+  );
+
+  return `${normalizedBaseUrl}/api`;
+};
+
+const rawBaseQuery = fetchBaseQuery({
+  baseUrl: resolveApiBaseUrl(process.env.NEXT_PUBLIC_API_BASE_URL),
+  prepareHeaders: (headers, { getState }) => {
+    const accessToken = (getState() as RootState).auth.accessToken;
+
+    if (accessToken) {
+      headers.set("Authorization", `Bearer ${accessToken}`);
+    }
+
+    return headers;
+  },
+});
+
+const baseQueryWithAuthHandling: BaseQueryFn<
+  string | FetchArgs,
+  unknown,
+  FetchBaseQueryError
+> = async (args, api, extraOptions) => {
+  const result = await rawBaseQuery(args, api, extraOptions);
+
+  if (result.error?.status === 401) {
+    api.dispatch(clearCredentials());
+    clearAuthSession();
+  }
+
+  return result;
+};
+
 export const api = createApi({
-  baseQuery: fetchBaseQuery({ baseUrl: process.env.NEXT_PUBLIC_API_BASE_URL }),
+  baseQuery: baseQueryWithAuthHandling,
   reducerPath: "api",
   tagTypes: [
+    "AuthBootstrapStatus",
     "Users",
     "OperationsOverview",
     "ReceivingReceipts",
@@ -308,6 +397,28 @@ export const api = createApi({
     "Suppliers",
   ],
   endpoints: (build) => ({
+    getAuthBootstrapStatus: build.query<AuthBootstrapStatus, void>({
+      query: () => "/auth/bootstrap-status",
+      providesTags: ["AuthBootstrapStatus"],
+    }),
+    registerInitialUser: build.mutation<AuthResponse, RegisterInitialUserRequest>({
+      query: (payload) => ({
+        url: "/auth/register",
+        method: "POST",
+        body: payload,
+      }),
+      invalidatesTags: ["AuthBootstrapStatus", "Users"],
+    }),
+    login: build.mutation<AuthResponse, LoginRequest>({
+      query: (payload) => ({
+        url: "/auth/login",
+        method: "POST",
+        body: payload,
+      }),
+    }),
+    getCurrentUser: build.query<AuthUser, void>({
+      query: () => "/auth/me",
+    }),
     getOperationsOverview: build.query<OperationsOverview, void>({
       query: () => "/operations/overview",
       providesTags: ["OperationsOverview"],
@@ -426,10 +537,22 @@ export const api = createApi({
       query: () => "/users",
       providesTags: ["Users"],
     }),
+    createUser: build.mutation<User, CreateUserRequest>({
+      query: (payload) => ({
+        url: "/users",
+        method: "POST",
+        body: payload,
+      }),
+      invalidatesTags: ["Users"],
+    }),
   }),
 });
 
 export const {
+  useGetAuthBootstrapStatusQuery,
+  useRegisterInitialUserMutation,
+  useLoginMutation,
+  useGetCurrentUserQuery,
   useGetOperationsOverviewQuery,
   useGetReceivingReceiptsQuery,
   useGetReceivingOptionsQuery,
@@ -446,4 +569,5 @@ export const {
   useReturnIssueRecordMutation,
   useGetSuppliersQuery,
   useGetUsersQuery,
+  useCreateUserMutation,
 } = api;
