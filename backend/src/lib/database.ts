@@ -24,10 +24,22 @@ export type DatabaseLike = {
   ) => number;
 };
 
+export type DatabaseRuntimeInfo = {
+  dialect: DatabaseDialect;
+  host?: string;
+  port?: number;
+  database?: string;
+  schema?: string;
+};
+
 const assertSafeIdentifier = (value: string, label: string) => {
   if (!/^[a-zA-Z0-9_]+$/.test(value)) {
     throw new Error(`Unsafe ${label}: ${value}`);
   }
+};
+
+let runtimeInfo: DatabaseRuntimeInfo = {
+  dialect: "mysql",
 };
 
 type ResolvedMySqlConfig = {
@@ -152,6 +164,13 @@ const createMySqlDatabase = (): DatabaseLike => {
     );
   }
 
+  runtimeInfo = {
+    dialect: "mysql",
+    host,
+    port,
+    database,
+  };
+
   const createDatabaseIfMissing =
     process.env.MYSQL_AUTO_CREATE_DATABASE !== "false";
 
@@ -242,6 +261,14 @@ const createMySqlDatabase = (): DatabaseLike => {
 const createSqlServerDatabase = (
   config: ResolvedSqlServerConfig
 ): DatabaseLike => {
+  runtimeInfo = {
+    dialect: "sqlserver",
+    host: config.server,
+    port: config.port,
+    database: config.database,
+    schema: config.schema,
+  };
+
   const workerPath = path.join(__dirname, "../../scripts/sqlserverSyncWorker.js");
   const client = rpc(workerPath, {
     ...config,
@@ -353,3 +380,5 @@ export const ensureIndex = (
 };
 
 export const isMySql = () => db.dialect === "mysql";
+
+export const getDatabaseRuntimeInfo = () => runtimeInfo;

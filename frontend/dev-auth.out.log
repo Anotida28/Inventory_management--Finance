@@ -91,3 +91,17 @@
  GET /_next/static/chunks/fallback/react-refresh.js 404 in 88ms
  GET /_next/static/chunks/fallback/pages/_app.js 404 in 88ms
  GET /favicon.ico 500 in 11ms
+ GET /login 500 in 123ms
+ GET /_next/static/chunks/fallback/webpack.js 404 in 167ms
+ GET /_next/static/chunks/fallback/react-refresh.js 404 in 161ms
+ GET /_next/static/chunks/fallback/main.js 404 in 160ms
+ GET /_next/static/chunks/fallback/pages/_error.js 404 in 80ms
+ GET /_next/static/chunks/fallback/pages/_app.js 404 in 79ms
+ GET /favicon.ico 500 in 20ms
+ GET /login 500 in 126ms
+ GET /_next/static/chunks/fallback/webpack.js 404 in 122ms
+ GET /_next/static/chunks/fallback/main.js 404 in 122ms
+ GET /_next/static/chunks/fallback/react-refresh.js 404 in 120ms
+ GET /_next/static/chunks/fallback/pages/_app.js 404 in 47ms
+ GET /_next/static/chunks/fallback/pages/_error.js 404 in 45ms
+ GET /favicon.ico 500 in 22ms

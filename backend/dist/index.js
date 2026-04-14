@@ -14,6 +14,7 @@ const authRoutes_1 = __importDefault(require("./routes/authRoutes"));
 const operationsRoutes_1 = __importDefault(require("./routes/operationsRoutes"));
 const userRoutes_1 = __importDefault(require("./routes/userRoutes"));
 const authMiddleware_1 = require("./middleware/authMiddleware");
+const database_1 = require("./lib/database");
 /* CONFIGURATIONS */
 const app = (0, express_1.default)();
 app.use(express_1.default.json());
@@ -32,5 +33,11 @@ app.use("/users", authMiddleware_1.requireAuth, userRoutes_1.default);
 /* SERVER */
 const port = Number(process.env.PORT) || 3001;
 app.listen(port, "0.0.0.0", () => {
+    const dbInfo = (0, database_1.getDatabaseRuntimeInfo)();
+    const schemaSegment = dbInfo.schema ? `, schema=${dbInfo.schema}` : "";
+    const hostSegment = dbInfo.host ? dbInfo.host : "unknown-host";
+    const portSegment = dbInfo.port ? dbInfo.port : "unknown-port";
+    const databaseSegment = dbInfo.database ? dbInfo.database : "unknown-database";
+    console.log(`Database runtime: dialect=${dbInfo.dialect}, host=${hostSegment}, port=${portSegment}, database=${databaseSegment}${schemaSegment}`);
     console.log(`Server running on port ${port}`);
 });

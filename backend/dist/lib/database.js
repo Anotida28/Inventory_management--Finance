@@ -3,7 +3,7 @@ var __importDefault = (this && this.__importDefault) || function (mod) {
     return (mod && mod.__esModule) ? mod : { "default": mod };
 };
 Object.defineProperty(exports, "__esModule", { value: true });
-exports.isMySql = exports.ensureIndex = exports.db = void 0;
+exports.getDatabaseRuntimeInfo = exports.isMySql = exports.ensureIndex = exports.db = void 0;
 const path_1 = __importDefault(require("path"));
 const SyncMySql = require("sync-mysql");
 const rpc = require("sync-rpc");
@@ -11,6 +11,9 @@ const assertSafeIdentifier = (value, label) => {
     if (!/^[a-zA-Z0-9_]+$/.test(value)) {
         throw new Error(`Unsafe ${label}: ${value}`);
     }
+};
+let runtimeInfo = {
+    dialect: "mysql",
 };
 const parseBoolean = (value, fallback) => {
     if (typeof value !== "string") {
@@ -93,6 +96,12 @@ const createMySqlDatabase = () => {
     if (!host || !user || !database) {
         throw new Error("MYSQL_HOST, MYSQL_USER, and MYSQL_DATABASE must be set before the server starts");
     }
+    runtimeInfo = {
+        dialect: "mysql",
+        host,
+        port,
+        database,
+    };
     const createDatabaseIfMissing = process.env.MYSQL_AUTO_CREATE_DATABASE !== "false";
     if (createDatabaseIfMissing) {
         const bootstrapConnection = new SyncMySql({
@@ -164,6 +173,13 @@ const createMySqlDatabase = () => {
     };
 };
 const createSqlServerDatabase = (config) => {
+    runtimeInfo = {
+        dialect: "sqlserver",
+        host: config.server,
+        port: config.port,
+        database: config.database,
+        schema: config.schema,
+    };
     const workerPath = path_1.default.join(__dirname, "../../scripts/sqlserverSyncWorker.js");
     const client = rpc(workerPath, Object.assign(Object.assign({}, config), { encrypt: config.encrypt &&
             !(config.trustServerCertificate && isIpv4Address(config.server)) }));
@@ -241,3 +257,5 @@ const ensureIndex = (tableName, indexName, columns, options = {}) => {
 exports.ensureIndex = ensureIndex;
 const isMySql = () => exports.db.dialect === "mysql";
 exports.isMySql = isMySql;
+const getDatabaseRuntimeInfo = () => runtimeInfo;
+exports.getDatabaseRuntimeInfo = getDatabaseRuntimeInfo;
