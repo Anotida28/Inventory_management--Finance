@@ -3,12 +3,12 @@ var __importDefault = (this && this.__importDefault) || function (mod) {
     return (mod && mod.__esModule) ? mod : { "default": mod };
 };
 Object.defineProperty(exports, "__esModule", { value: true });
-exports.verifyAccessToken = exports.loginUserData = exports.registerInitialUserData = exports.createUserData = exports.listUsersData = exports.getUserByIdData = exports.getAuthBootstrapStatusData = void 0;
+exports.verifyAccessToken = exports.loginUserData = exports.registerInitialUserData = exports.createUserData = exports.listUsersData = exports.getUserByIdData = exports.getAuthBootstrapStatusData = exports.AUTH_TOKEN_TTL_SECONDS = void 0;
 const bcryptjs_1 = __importDefault(require("bcryptjs"));
 const jsonwebtoken_1 = __importDefault(require("jsonwebtoken"));
 const database_1 = require("./database");
-const AUTH_TOKEN_TTL_SECONDS = 60 * 60 * 8;
-const AUTH_TOKEN_TTL = `${AUTH_TOKEN_TTL_SECONDS}s`;
+exports.AUTH_TOKEN_TTL_SECONDS = 60 * 60 * 8;
+const AUTH_TOKEN_TTL = `${exports.AUTH_TOKEN_TTL_SECONDS}s`;
 const allowedRoles = ["SUPER_ADMIN", "ADMIN", "USER", "VIEWER"];
 const normalizeString = (value) => typeof value === "string" ? value.trim() : "";
 const normalizeIdentifier = (value) => normalizeString(value).toLowerCase();
@@ -21,7 +21,14 @@ const normalizeRole = (value) => {
 };
 const isValidEmail = (value) => /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(value);
 const isValidUsername = (value) => /^[a-z0-9._-]{3,32}$/i.test(value);
-const getJwtSecret = () => process.env.JWT_SECRET || "dev-secret";
+const getJwtSecret = () => {
+    var _a;
+    const jwtSecret = (_a = process.env.JWT_SECRET) === null || _a === void 0 ? void 0 : _a.trim();
+    if (!jwtSecret) {
+        throw new Error("JWT_SECRET must be set before the server starts");
+    }
+    return jwtSecret;
+};
 const ensureAuthSchema = () => {
     if (database_1.db.dialect === "sqlserver") {
         return;
@@ -126,7 +133,7 @@ const signAccessToken = (user) => {
 const buildAuthResponse = (user) => ({
     accessToken: signAccessToken(user),
     tokenType: "Bearer",
-    expiresIn: AUTH_TOKEN_TTL_SECONDS,
+    expiresIn: exports.AUTH_TOKEN_TTL_SECONDS,
     user,
 });
 const validateCommonUserFields = (payload) => {

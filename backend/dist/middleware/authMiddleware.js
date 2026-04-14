@@ -2,6 +2,7 @@
 Object.defineProperty(exports, "__esModule", { value: true });
 exports.requireRole = exports.optionalAuth = exports.requireAuth = void 0;
 const authData_1 = require("../lib/authData");
+const authSessionCookie_1 = require("../lib/authSessionCookie");
 const getBearerToken = (authorizationHeader) => {
     if (!authorizationHeader) {
         return undefined;
@@ -12,8 +13,12 @@ const getBearerToken = (authorizationHeader) => {
     }
     return token;
 };
+const getRequestAccessToken = (req) => {
+    var _a;
+    return (_a = getBearerToken(req.headers.authorization)) !== null && _a !== void 0 ? _a : (0, authSessionCookie_1.getAuthSessionToken)(req);
+};
 const attachAuthenticatedUser = (req, res, next, options = {}) => {
-    const token = getBearerToken(req.headers.authorization);
+    const token = getRequestAccessToken(req);
     if (!token) {
         if (options.optional) {
             next();

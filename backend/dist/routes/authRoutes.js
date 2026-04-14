@@ -7,5 +7,6 @@ const router = (0, express_1.Router)();
 router.get("/bootstrap-status", authController_1.getAuthBootstrapStatus);
 router.post("/register", authController_1.registerInitialUser);
 router.post("/login", authController_1.login);
+router.post("/logout", authController_1.logout);
 router.get("/me", authMiddleware_1.requireAuth, authController_1.getCurrentUser);
 exports.default = router;

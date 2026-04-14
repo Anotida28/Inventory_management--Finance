@@ -1,10 +1,7 @@
 import { NextFunction, Request, Response } from "express";
-import {
-  AuthRole,
-  AuthUser,
-  getUserByIdData,
-  verifyAccessToken,
-} from "../lib/authData";
+import type { AuthRole, AuthUser } from "../lib/authData";
+import { getAuthSessionToken } from "../lib/authSessionCookie";
+import { backendRuntime } from "../lib/runtimeClient";
 
 export type AuthenticatedRequest = Request & {
   user?: AuthUser;
@@ -24,13 +21,17 @@ const getBearerToken = (authorizationHeader: string | undefined) => {
   return token;
 };
 
+const getRequestAccessToken = (req: Request) => {
+  return getBearerToken(req.headers.authorization) ?? getAuthSessionToken(req);
+};
+
 const attachAuthenticatedUser = (
   req: AuthenticatedRequest,
   res: Response,
   next: NextFunction,
   options: { optional?: boolean } = {}
 ) => {
-  const token = getBearerToken(req.headers.authorization);
+  const token = getRequestAccessToken(req);
 
   if (!token) {
     if (options.optional) {
@@ -42,20 +43,15 @@ const attachAuthenticatedUser = (
     return;
   }
 
-  try {
-    const payload = verifyAccessToken(token);
-    const user = getUserByIdData(payload.sub);
-
-    if (!user || user.status !== "Active") {
+  backendRuntime.auth
+    .authenticateToken(token)
+    .then((user) => {
+      req.user = user;
+      next();
+    })
+    .catch(() => {
       res.status(401).json({ message: "Invalid or expired token" });
-      return;
-    }
-
-    req.user = user;
-    next();
-  } catch (error) {
-    res.status(401).json({ message: "Invalid or expired token" });
-  }
+    });
 };
 
 export const requireAuth = (

@@ -1,8 +1,7 @@
 "use client";
 
 import AuthShell from "@/components/auth/AuthShell";
-import { setAuthSession } from "@/lib/authSession";
-import { setCredentials } from "@/services/authSlice";
+import { setCurrentUser } from "@/services/authSlice";
 import {
   useGetAuthBootstrapStatusQuery,
   useRegisterInitialUserMutation,
@@ -51,7 +50,7 @@ export default function RegisterPage() {
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
   const [confirmPassword, setConfirmPassword] = useState("");
-  const [rememberMe, setRememberMe] = useState(true);
+  const [rememberMe, setRememberMe] = useState(false);
   const [showPassword, setShowPassword] = useState(false);
   const [submitError, setSubmitError] = useState<string | null>(null);
 
@@ -71,10 +70,10 @@ export default function RegisterPage() {
         username,
         email,
         password,
+        rememberMe,
       }).unwrap();
 
-      dispatch(setCredentials(auth));
-      setAuthSession(rememberMe);
+      dispatch(setCurrentUser(auth.user));
       router.replace("/dashboard");
     } catch (error) {
       setSubmitError(getMutationErrorMessage(error));

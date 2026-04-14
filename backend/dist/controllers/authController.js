@@ -9,14 +9,20 @@ var __awaiter = (this && this.__awaiter) || function (thisArg, _arguments, P, ge
     });
 };
 Object.defineProperty(exports, "__esModule", { value: true });
-exports.getCurrentUser = exports.login = exports.registerInitialUser = exports.getAuthBootstrapStatus = void 0;
+exports.logout = exports.getCurrentUser = exports.login = exports.registerInitialUser = exports.getAuthBootstrapStatus = void 0;
 const authData_1 = require("../lib/authData");
+const authSessionCookie_1 = require("../lib/authSessionCookie");
 const getErrorMessage = (error) => {
     if (error instanceof Error) {
         return error.message;
     }
     return "Unexpected server error";
 };
+const resolveRememberMe = (value) => value === true;
+const buildSessionResponse = (authResponse) => ({
+    expiresIn: authResponse.expiresIn,
+    user: authResponse.user,
+});
 const getAuthBootstrapStatus = (req, res) => __awaiter(void 0, void 0, void 0, function* () {
     try {
         res.json((0, authData_1.getAuthBootstrapStatusData)());
@@ -34,7 +40,11 @@ const registerInitialUser = (req, res) => __awaiter(void 0, void 0, void 0, func
             email: req.body.email,
             password: req.body.password,
         });
-        res.status(201).json(authResponse);
+        (0, authSessionCookie_1.setAuthSessionCookie)(res, authResponse.accessToken, {
+            persistent: resolveRememberMe(req.body.rememberMe),
+            maxAgeSeconds: authData_1.AUTH_TOKEN_TTL_SECONDS,
+        });
+        res.status(201).json(buildSessionResponse(authResponse));
     }
     catch (error) {
         const message = getErrorMessage(error);
@@ -61,7 +71,11 @@ const login = (req, res) => __awaiter(void 0, void 0, void 0, function* () {
             username: req.body.username,
             password: req.body.password,
         });
-        res.json(authResponse);
+        (0, authSessionCookie_1.setAuthSessionCookie)(res, authResponse.accessToken, {
+            persistent: resolveRememberMe(req.body.rememberMe),
+            maxAgeSeconds: authData_1.AUTH_TOKEN_TTL_SECONDS,
+        });
+        res.json(buildSessionResponse(authResponse));
     }
     catch (error) {
         const message = getErrorMessage(error);
@@ -96,3 +110,8 @@ const getCurrentUser = (req, res) => __awaiter(void 0, void 0, void 0, function*
     }
 });
 exports.getCurrentUser = getCurrentUser;
+const logout = (_req, res) => __awaiter(void 0, void 0, void 0, function* () {
+    (0, authSessionCookie_1.clearAuthSessionCookie)(res);
+    res.status(204).send();
+});
+exports.logout = logout;

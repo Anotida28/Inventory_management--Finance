@@ -1,10 +1,10 @@
 import { Request, Response } from "express";
-import { createUserData, getUsersData } from "../lib/usersData";
 import { AuthenticatedRequest } from "../middleware/authMiddleware";
+import { backendRuntime } from "../lib/runtimeClient";
 
 export const getUsers = async (req: Request, res: Response): Promise<void> => {
   try {
-    res.json(getUsersData());
+    res.json(await backendRuntime.users.getUsers());
   } catch (error) {
     res.status(500).json({ message: "Error retrieving users" });
   }
@@ -28,7 +28,7 @@ export const createUser = async (
       return;
     }
 
-    const createdUser = createUserData(
+    const createdUser = await backendRuntime.users.createUser(
       {
         username: req.body.username,
         name: req.body.name,

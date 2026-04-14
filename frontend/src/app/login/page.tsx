@@ -1,8 +1,7 @@
 "use client";
 
 import AuthShell from "@/components/auth/AuthShell";
-import { clearAuthSession, setAuthSession } from "@/lib/authSession";
-import { setCredentials } from "@/services/authSlice";
+import { setCurrentUser } from "@/services/authSlice";
 import { useLoginMutation } from "@/services/api";
 import { useAppDispatch } from "@/services/store";
 import { ArrowRight, Eye, EyeOff, Loader2, Lock, UserCircle2 } from "lucide-react";
@@ -43,6 +42,7 @@ export default function LoginPage() {
   const [login, { isLoading }] = useLoginMutation();
   const [identifier, setIdentifier] = useState("");
   const [password, setPassword] = useState("");
+  const [rememberMe, setRememberMe] = useState(false);
   const [showPassword, setShowPassword] = useState(false);
   const [submitError, setSubmitError] = useState<string | null>(null);
 
@@ -60,13 +60,12 @@ export default function LoginPage() {
       const auth = await login({
         username: identifier,
         password,
+        rememberMe,
       }).unwrap();
 
-      dispatch(setCredentials(auth));
-      setAuthSession(true);
+      dispatch(setCurrentUser(auth.user));
       router.replace(nextPath);
     } catch (error) {
-      clearAuthSession();
       setSubmitError(getMutationErrorMessage(error));
     }
   };
@@ -131,6 +130,16 @@ export default function LoginPage() {
             {submitError}
           </div>
         ) : null}
+
+        <label className="inline-flex items-center gap-2 text-sm text-slate-500">
+          <input
+            type="checkbox"
+            checked={rememberMe}
+            onChange={(event) => setRememberMe(event.target.checked)}
+            className="h-4 w-4 rounded border-slate-300 text-indigo-600 focus:ring-indigo-500"
+          />
+          Keep me signed in for this browser
+        </label>
 
         <button
           type="submit"

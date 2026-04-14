@@ -1,7 +1,8 @@
 import "dotenv/config";
 import express from "express";
 import bodyParser from "body-parser";
-import cors from "cors";
+import cors, { CorsOptions } from "cors";
+import cookieParser from "cookie-parser";
 import helmet from "helmet";
 import morgan from "morgan";
 /* ROUTE IMPORTS */
@@ -11,6 +12,44 @@ import userRoutes from "./routes/userRoutes";
 import { requireAuth } from "./middleware/authMiddleware";
 import { getDatabaseRuntimeInfo } from "./lib/database";
 
+const getRequiredEnv = (name: string) => {
+  const value = process.env[name]?.trim();
+
+  if (!value) {
+    throw new Error(`${name} must be set before the server starts`);
+  }
+
+  return value;
+};
+
+const resolveAllowedOrigins = () => {
+  const configuredOrigins = (process.env.CORS_ORIGIN || "")
+    .split(",")
+    .map((origin) => origin.trim())
+    .filter(Boolean);
+
+  if (configuredOrigins.length > 0) {
+    return configuredOrigins;
+  }
+
+  return ["http://localhost:3000", "http://127.0.0.1:3000"];
+};
+
+getRequiredEnv("JWT_SECRET");
+
+const allowedOrigins = resolveAllowedOrigins();
+const corsOptions: CorsOptions = {
+  credentials: true,
+  origin: (origin, callback) => {
+    if (!origin || allowedOrigins.includes(origin)) {
+      callback(null, true);
+      return;
+    }
+
+    callback(new Error("Origin not allowed by CORS"));
+  },
+};
+
 /* CONFIGURATIONS */
 const app = express();
 app.use(express.json());
@@ -19,7 +58,8 @@ app.use(helmet.crossOriginResourcePolicy({ policy: "cross-origin" }));
 app.use(morgan("common"));
 app.use(bodyParser.json());
 app.use(bodyParser.urlencoded({ extended: false }));
-app.use(cors());
+app.use(cookieParser());
+app.use(cors(corsOptions));
 
 /* ROUTES */
 app.use("/api/auth", authRoutes);

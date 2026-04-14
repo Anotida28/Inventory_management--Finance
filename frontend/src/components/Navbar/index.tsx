@@ -1,7 +1,7 @@
 "use client";
 
-import { clearAuthSession } from "@/lib/authSession";
 import { clearCredentials } from "@/services/authSlice";
+import { useLogoutMutation } from "@/services/api";
 import { useAppDispatch, useAppSelector } from "@/services/store";
 import { setIsDarkMode, setIsSidebarCollapsed } from "@/services/uiSlice";
 import { Bell, LogOut, Menu, Moon, Settings, Sun } from "lucide-react";
@@ -13,6 +13,7 @@ import React from "react";
 const Navbar = () => {
   const dispatch = useAppDispatch();
   const router = useRouter();
+  const [logoutRequest, { isLoading: isLoggingOut }] = useLogoutMutation();
   const isSidebarCollapsed = useAppSelector(
     (state) => state.global.isSidebarCollapsed
   );
@@ -27,10 +28,13 @@ const Navbar = () => {
     dispatch(setIsDarkMode(!isDarkMode));
   };
 
-  const logout = () => {
-    clearAuthSession();
-    dispatch(clearCredentials());
-    router.replace("/login");
+  const logout = async () => {
+    try {
+      await logoutRequest().unwrap();
+    } finally {
+      dispatch(clearCredentials());
+      router.replace("/login");
+    }
   };
 
   return (
@@ -96,16 +100,18 @@ const Navbar = () => {
           <button
             type="button"
             onClick={logout}
+            disabled={isLoggingOut}
             className="inline-flex items-center gap-2 rounded-full border border-gray-200 px-3 py-2 text-sm font-medium text-gray-600 transition hover:border-rose-200 hover:bg-rose-50 hover:text-rose-600"
           >
             <LogOut className="h-4 w-4" />
-            Log out
+            {isLoggingOut ? "Logging out..." : "Log out"}
           </button>
         </div>
         <div className="flex items-center gap-4">
           <button
             type="button"
             onClick={logout}
+            disabled={isLoggingOut}
             className="md:hidden text-gray-500 transition hover:text-rose-600"
             aria-label="Log out"
           >

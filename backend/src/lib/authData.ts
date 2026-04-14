@@ -1,8 +1,8 @@
 import bcrypt from "bcryptjs";
 import jwt from "jsonwebtoken";
+import { AUTH_TOKEN_TTL_SECONDS } from "./authConstants";
 import { db, ensureIndex } from "./database";
 
-const AUTH_TOKEN_TTL_SECONDS = 60 * 60 * 8;
 const AUTH_TOKEN_TTL = `${AUTH_TOKEN_TTL_SECONDS}s`;
 const allowedRoles = ["SUPER_ADMIN", "ADMIN", "USER", "VIEWER"] as const;
 
@@ -77,7 +77,15 @@ const isValidEmail = (value: string) => /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(value)
 const isValidUsername = (value: string) =>
   /^[a-z0-9._-]{3,32}$/i.test(value);
 
-const getJwtSecret = () => process.env.JWT_SECRET || "dev-secret";
+const getJwtSecret = () => {
+  const jwtSecret = process.env.JWT_SECRET?.trim();
+
+  if (!jwtSecret) {
+    throw new Error("JWT_SECRET must be set before the server starts");
+  }
+
+  return jwtSecret;
+};
 
 const ensureAuthSchema = () => {
   if (db.dialect === "sqlserver") {

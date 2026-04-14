@@ -1,26 +1,5 @@
 import { Request, Response } from "express";
 import {
-  acknowledgeIssueRecordData,
-  getBranchesData,
-  getAvailableSerialAssetsData,
-  createIssueRecordData,
-  getHqStockDetailData,
-  getHqStockData,
-  returnIssueRecordData,
-  getIssueRecordsData,
-  getOperationsOverviewData,
-  getSuppliersData,
-} from "../lib/operationsData";
-import {
-  appendReceivingReceiptAttachmentsData,
-  createReceivingReceiptData,
-  getOperationAttachmentByIdData,
-  getReceivingOptionsData,
-  getReceivingReceiptByIdData,
-  getReceivingReceiptsWithAttachmentsData,
-  verifyReceivingReceiptData,
-} from "../lib/receivingData";
-import {
   mapUploadedIssueFiles,
   removeUploadedIssueFiles,
   resolveStoredIssueAttachmentPath,
@@ -29,6 +8,7 @@ import {
   mapUploadedReceiptFiles,
   removeUploadedReceiptFiles,
 } from "../lib/receiptUploads";
+import { backendRuntime } from "../lib/runtimeClient";
 
 type IssueRequest = Request & {
   files?: Express.Multer.File[];
@@ -51,7 +31,7 @@ export const getOperationsOverview = async (
   res: Response
 ): Promise<void> => {
   try {
-    res.json(getOperationsOverviewData());
+    res.json(await backendRuntime.operations.getOperationsOverview());
   } catch (error) {
     res.status(500).json({ message: "Error retrieving operations overview" });
   }
@@ -62,7 +42,7 @@ export const getReceivingReceipts = async (
   res: Response
 ): Promise<void> => {
   try {
-    res.json(getReceivingReceiptsWithAttachmentsData());
+    res.json(await backendRuntime.receiving.getReceivingReceipts());
   } catch (error) {
     res.status(500).json({ message: "Error retrieving receiving receipts" });
   }
@@ -73,7 +53,7 @@ export const getReceivingOptions = async (
   res: Response
 ): Promise<void> => {
   try {
-    res.json(getReceivingOptionsData());
+    res.json(await backendRuntime.receiving.getReceivingOptions());
   } catch (error) {
     res.status(500).json({ message: "Error retrieving receiving options" });
   }
@@ -84,7 +64,9 @@ export const getReceivingReceiptById = async (
   res: Response
 ): Promise<void> => {
   try {
-    const receipt = getReceivingReceiptByIdData(req.params.receiptId);
+    const receipt = await backendRuntime.receiving.getReceivingReceiptById(
+      req.params.receiptId
+    );
 
     if (!receipt) {
       res.status(404).json({ message: "Receipt not found" });
@@ -110,7 +92,7 @@ export const createReceivingReceipt = async (
     const parsedLines =
       typeof req.body.lines === "string" ? JSON.parse(req.body.lines) : req.body.lines;
 
-    const createdReceipt = createReceivingReceiptData(
+    const createdReceipt = await backendRuntime.receiving.createReceipt(
       {
         receiptType: req.body.receiptType,
         supplierId: req.body.supplierId,
@@ -167,7 +149,7 @@ export const addReceivingReceiptAttachments = async (
     : [];
 
   try {
-    const updatedReceipt = appendReceivingReceiptAttachmentsData(
+    const updatedReceipt = await backendRuntime.receiving.addReceiptAttachments(
       req.params.receiptId,
       mapUploadedReceiptFiles(uploadedFiles)
     );
@@ -197,7 +179,9 @@ export const verifyReceivingReceipt = async (
   res: Response
 ): Promise<void> => {
   try {
-    const updatedReceipt = verifyReceivingReceiptData(req.params.receiptId);
+    const updatedReceipt = await backendRuntime.receiving.verifyReceipt(
+      req.params.receiptId
+    );
 
     res.json(updatedReceipt);
   } catch (error) {
@@ -227,7 +211,7 @@ export const getHqStock = async (
   res: Response
 ): Promise<void> => {
   try {
-    res.json(getHqStockData());
+    res.json(await backendRuntime.operations.getHqStock());
   } catch (error) {
     res.status(500).json({ message: "Error retrieving HQ stock" });
   }
@@ -238,7 +222,9 @@ export const getHqStockDetail = async (
   res: Response
 ): Promise<void> => {
   try {
-    const stockItem = getHqStockDetailData(req.params.stockId);
+    const stockItem = await backendRuntime.operations.getHqStockDetail(
+      req.params.stockId
+    );
 
     if (!stockItem) {
       res.status(404).json({ message: "HQ stock item not found" });
@@ -258,7 +244,7 @@ export const getAvailableSerialAssets = async (
   try {
     const itemName =
       typeof req.query.itemName === "string" ? req.query.itemName : undefined;
-    res.json(getAvailableSerialAssetsData(itemName));
+    res.json(await backendRuntime.operations.getAvailableSerialAssets(itemName));
   } catch (error) {
     res
       .status(500)
@@ -271,7 +257,7 @@ export const getBranches = async (
   res: Response
 ): Promise<void> => {
   try {
-    res.json(getBranchesData());
+    res.json(await backendRuntime.operations.getBranches());
   } catch (error) {
     res.status(500).json({ message: "Error retrieving branches" });
   }
@@ -282,7 +268,7 @@ export const getIssueRecords = async (
   res: Response
 ): Promise<void> => {
   try {
-    res.json(getIssueRecordsData());
+    res.json(await backendRuntime.operations.getIssueRecords());
   } catch (error) {
     res.status(500).json({ message: "Error retrieving issue records" });
   }
@@ -309,7 +295,7 @@ export const createIssueRecord = async (
       notes,
     } = req.body;
 
-    const createdRecord = createIssueRecordData(
+    const createdRecord = await backendRuntime.operations.createIssueRecord(
       {
         itemName,
         serialNumber,
@@ -357,11 +343,15 @@ export const acknowledgeIssueRecord = async (
   res: Response
 ): Promise<void> => {
   try {
-    const updatedIssueRecord = acknowledgeIssueRecordData(req.params.issueId, {
-      acknowledgedBy: req.body.acknowledgedBy,
-      acknowledgedAt: req.body.acknowledgedAt,
-      acknowledgementNotes: req.body.acknowledgementNotes,
-    });
+    const updatedIssueRecord =
+      await backendRuntime.operations.acknowledgeIssueRecord(
+        req.params.issueId,
+        {
+          acknowledgedBy: req.body.acknowledgedBy,
+          acknowledgedAt: req.body.acknowledgedAt,
+          acknowledgementNotes: req.body.acknowledgementNotes,
+        }
+      );
 
     res.json(updatedIssueRecord);
   } catch (error) {
@@ -394,11 +384,14 @@ export const returnIssueRecord = async (
   res: Response
 ): Promise<void> => {
   try {
-    const updatedIssueRecord = returnIssueRecordData(req.params.issueId, {
-      returnedBy: req.body.returnedBy,
-      returnedAt: req.body.returnedAt,
-      returnNotes: req.body.returnNotes,
-    });
+    const updatedIssueRecord = await backendRuntime.operations.returnIssueRecord(
+      req.params.issueId,
+      {
+        returnedBy: req.body.returnedBy,
+        returnedAt: req.body.returnedAt,
+        returnNotes: req.body.returnNotes,
+      }
+    );
 
     res.json(updatedIssueRecord);
   } catch (error) {
@@ -439,7 +432,9 @@ export const downloadOperationAttachment = async (
   res: Response
 ): Promise<void> => {
   try {
-    const attachment = getOperationAttachmentByIdData(req.params.attachmentId);
+    const attachment = await backendRuntime.receiving.getOperationAttachmentById(
+      req.params.attachmentId
+    );
 
     if (!attachment) {
       res.status(404).json({ message: "Attachment not found" });
@@ -460,7 +455,7 @@ export const getSuppliers = async (
   res: Response
 ): Promise<void> => {
   try {
-    res.json(getSuppliersData());
+    res.json(await backendRuntime.operations.getSuppliers());
   } catch (error) {
     res.status(500).json({ message: "Error retrieving suppliers" });
   }

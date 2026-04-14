@@ -1,11 +1,17 @@
 import { Request, Response } from "express";
+import type { AuthResponse, AuthUser } from "../lib/authData";
+import { AUTH_TOKEN_TTL_SECONDS } from "../lib/authConstants";
 import {
-  getAuthBootstrapStatusData,
-  getUserByIdData,
-  loginUserData,
-  registerInitialUserData,
-} from "../lib/authData";
-import { AuthenticatedRequest } from "../middleware/authMiddleware";
+  clearAuthSessionCookie,
+  setAuthSessionCookie,
+} from "../lib/authSessionCookie";
+import { backendRuntime } from "../lib/runtimeClient";
+import type { AuthenticatedRequest } from "../middleware/authMiddleware";
+
+type AuthSessionResponse = {
+  expiresIn: number;
+  user: AuthUser;
+};
 
 const getErrorMessage = (error: unknown) => {
   if (error instanceof Error) {
@@ -15,12 +21,19 @@ const getErrorMessage = (error: unknown) => {
   return "Unexpected server error";
 };
 
+const resolveRememberMe = (value: unknown) => value === true;
+
+const buildSessionResponse = (authResponse: AuthResponse): AuthSessionResponse => ({
+  expiresIn: authResponse.expiresIn,
+  user: authResponse.user,
+});
+
 export const getAuthBootstrapStatus = async (
   req: Request,
   res: Response
 ): Promise<void> => {
   try {
-    res.json(getAuthBootstrapStatusData());
+    res.json(await backendRuntime.auth.getAuthBootstrapStatus());
   } catch (error) {
     res.status(500).json({ message: "Error retrieving auth status" });
   }
@@ -31,14 +44,19 @@ export const registerInitialUser = async (
   res: Response
 ): Promise<void> => {
   try {
-    const authResponse = registerInitialUserData({
+    const authResponse = await backendRuntime.auth.registerInitialUser({
       username: req.body.username,
       name: req.body.name,
       email: req.body.email,
       password: req.body.password,
     });
 
-    res.status(201).json(authResponse);
+    setAuthSessionCookie(res, authResponse.accessToken, {
+      persistent: resolveRememberMe(req.body.rememberMe),
+      maxAgeSeconds: AUTH_TOKEN_TTL_SECONDS,
+    });
+
+    res.status(201).json(buildSessionResponse(authResponse));
   } catch (error) {
     const message = getErrorMessage(error);
 
@@ -67,12 +85,17 @@ export const registerInitialUser = async (
 
 export const login = async (req: Request, res: Response): Promise<void> => {
   try {
-    const authResponse = loginUserData({
+    const authResponse = await backendRuntime.auth.loginUser({
       username: req.body.username,
       password: req.body.password,
     });
 
-    res.json(authResponse);
+    setAuthSessionCookie(res, authResponse.accessToken, {
+      persistent: resolveRememberMe(req.body.rememberMe),
+      maxAgeSeconds: AUTH_TOKEN_TTL_SECONDS,
+    });
+
+    res.json(buildSessionResponse(authResponse));
   } catch (error) {
     const message = getErrorMessage(error);
 
@@ -103,7 +126,7 @@ export const getCurrentUser = async (
       return;
     }
 
-    const user = getUserByIdData(req.user.userId);
+    const user = await backendRuntime.auth.getUserById(req.user.userId);
 
     if (!user) {
       res.status(404).json({ message: "User not found" });
@@ -114,4 +137,9 @@ export const getCurrentUser = async (
   } catch (error) {
     res.status(500).json({ message: "Error retrieving current user" });
   }
+};
+
+export const logout = async (_req: Request, res: Response): Promise<void> => {
+  clearAuthSessionCookie(res);
+  res.status(204).send();
 };

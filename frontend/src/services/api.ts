@@ -5,9 +5,7 @@ import {
   createApi,
   fetchBaseQuery,
 } from "@reduxjs/toolkit/query/react";
-import { clearAuthSession } from "@/lib/authSession";
 import { clearCredentials } from "./authSlice";
-import type { RootState } from "./store";
 
 export type UserRole = "SUPER_ADMIN" | "ADMIN" | "USER" | "VIEWER";
 
@@ -24,8 +22,6 @@ export interface AuthUser {
 }
 
 export interface AuthResponse {
-  accessToken: string;
-  tokenType: "Bearer";
   expiresIn: number;
   user: AuthUser;
 }
@@ -33,6 +29,7 @@ export interface AuthResponse {
 export interface LoginRequest {
   username: string;
   password: string;
+  rememberMe?: boolean;
 }
 
 export interface RegisterInitialUserRequest {
@@ -40,6 +37,7 @@ export interface RegisterInitialUserRequest {
   name: string;
   email: string;
   password: string;
+  rememberMe?: boolean;
 }
 
 export interface AuthBootstrapStatus {
@@ -355,15 +353,7 @@ const resolveApiBaseUrl = (baseUrl: string | undefined) => {
 
 const rawBaseQuery = fetchBaseQuery({
   baseUrl: resolveApiBaseUrl(process.env.NEXT_PUBLIC_API_BASE_URL),
-  prepareHeaders: (headers, { getState }) => {
-    const accessToken = (getState() as RootState).auth.accessToken;
-
-    if (accessToken) {
-      headers.set("Authorization", `Bearer ${accessToken}`);
-    }
-
-    return headers;
-  },
+  credentials: "include",
 });
 
 const baseQueryWithAuthHandling: BaseQueryFn<
@@ -372,10 +362,21 @@ const baseQueryWithAuthHandling: BaseQueryFn<
   FetchBaseQueryError
 > = async (args, api, extraOptions) => {
   const result = await rawBaseQuery(args, api, extraOptions);
+  const requestUrl = typeof args === "string" ? args : args.url;
 
   if (result.error?.status === 401) {
+    if (requestUrl !== "/auth/logout") {
+      await rawBaseQuery(
+        {
+          url: "/auth/logout",
+          method: "POST",
+        },
+        api,
+        extraOptions
+      );
+    }
+
     api.dispatch(clearCredentials());
-    clearAuthSession();
   }
 
   return result;
@@ -414,6 +415,12 @@ export const api = createApi({
         url: "/auth/login",
         method: "POST",
         body: payload,
+      }),
+    }),
+    logout: build.mutation<void, void>({
+      query: () => ({
+        url: "/auth/logout",
+        method: "POST",
       }),
     }),
     getCurrentUser: build.query<AuthUser, void>({
@@ -552,6 +559,7 @@ export const {
   useGetAuthBootstrapStatusQuery,
   useRegisterInitialUserMutation,
   useLoginMutation,
+  useLogoutMutation,
   useGetCurrentUserQuery,
   useGetOperationsOverviewQuery,
   useGetReceivingReceiptsQuery,
