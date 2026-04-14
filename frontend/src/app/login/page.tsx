@@ -2,9 +2,18 @@
 
 import AuthShell from "@/components/auth/AuthShell";
 import { setCurrentUser } from "@/services/authSlice";
-import { useLoginMutation } from "@/services/api";
+import { useGetAuthBootstrapStatusQuery, useLoginMutation } from "@/services/api";
 import { useAppDispatch } from "@/services/store";
-import { ArrowRight, Eye, EyeOff, Loader2, Lock, UserCircle2 } from "lucide-react";
+import {
+  AlertCircle,
+  ArrowRight,
+  Eye,
+  EyeOff,
+  Loader2,
+  Lock,
+  UserCircle2,
+} from "lucide-react";
+import Link from "next/link";
 import { useRouter, useSearchParams } from "next/navigation";
 import { FormEvent, useMemo, useState } from "react";
 
@@ -39,6 +48,7 @@ export default function LoginPage() {
   const dispatch = useAppDispatch();
   const router = useRouter();
   const searchParams = useSearchParams();
+  const { data: bootstrapStatus } = useGetAuthBootstrapStatusQuery();
   const [login, { isLoading }] = useLoginMutation();
   const [identifier, setIdentifier] = useState("");
   const [password, setPassword] = useState("");
@@ -50,6 +60,55 @@ export default function LoginPage() {
     () => resolveNextPath(searchParams.get("next")),
     [searchParams]
   );
+
+  if (bootstrapStatus?.requiresSetup) {
+    return (
+      <AuthShell
+        fitScreen
+        title="Create the first administrator"
+        subtitle="This workspace is running against a fresh database, so there is no account to sign in with yet."
+        footerNote={
+          <Link href="/register" className="font-medium text-indigo-600">
+            Continue to setup
+          </Link>
+        }
+        helper={
+          <div className="rounded-2xl border border-indigo-100 bg-indigo-50 px-4 py-3 text-xs text-indigo-700">
+            The first registered account becomes <strong>SUPER_ADMIN</strong> and
+            can create the rest of the team later from the Users page.
+          </div>
+        }
+      >
+        <div className="space-y-5">
+          <div className="rounded-3xl border border-slate-200 bg-slate-50 p-6">
+            <div className="flex items-start gap-3">
+              <div className="mt-0.5 grid h-10 w-10 shrink-0 place-items-center rounded-2xl bg-amber-100 text-amber-700">
+                <AlertCircle className="h-5 w-5" />
+              </div>
+              <div>
+                <p className="text-base font-semibold text-slate-900">
+                  Setup required before sign-in
+                </p>
+                <p className="mt-2 text-sm leading-6 text-slate-500">
+                  The login error is happening because the backend currently has
+                  zero users. Create the first administrator account once, then
+                  return to normal sign-in.
+                </p>
+              </div>
+            </div>
+
+            <Link
+              href="/register"
+              className="mt-6 inline-flex items-center gap-2 rounded-2xl bg-[linear-gradient(135deg,_#3730a3,_#4f46e5)] px-4 py-3 text-sm font-medium text-white shadow-lg shadow-indigo-500/20"
+            >
+              Go to initial setup
+              <ArrowRight className="h-4 w-4" />
+            </Link>
+          </div>
+        </div>
+      </AuthShell>
+    );
+  }
 
   const handleSubmit = async (event: FormEvent<HTMLFormElement>) => {
     event.preventDefault();
