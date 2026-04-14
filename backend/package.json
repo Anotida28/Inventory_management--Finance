@@ -5,6 +5,7 @@
   "main": "dist/index.js",
   "scripts": {
     "db:bootstrap": "npm run build && node scripts/bootstrapOperationalRuntime.js",
+    "db:dev:ephemeral": "node scripts/devEphemeralMySql.js",
     "db:verify": "npm run build && node scripts/verifyOperationalRuntime.js",
     "test": "npm run build && node scripts/authWorkflowRegression.js && node scripts/returnFlowRegression.js && node scripts/receiptDocumentWorkflowRegression.js",
     "build": "rimraf dist && npx tsc",

@@ -559,10 +559,6 @@ export const reconcileReceivingReceiptDocumentStates = () => {
   syncReceivingReceiptDocumentStates();
 };
 
-if (runtimeSchemaMutationsEnabled()) {
-  syncReceivingReceiptDocumentStates();
-}
-
 const ensureStockLocationExists = (storageLocation: string) => {
   const existingLocation = db
     .prepare("SELECT locationId FROM stock_locations WHERE locationName = ?")
