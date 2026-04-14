@@ -9,6 +9,7 @@ import morgan from "morgan";
 import authRoutes from "./routes/authRoutes";
 import operationsRoutes from "./routes/operationsRoutes";
 import userRoutes from "./routes/userRoutes";
+import { backendRuntime } from "./lib/runtimeClient";
 import { requireAuth } from "./middleware/authMiddleware";
 import { getDatabaseRuntimeInfo } from "./lib/database";
 
@@ -71,15 +72,24 @@ app.use("/users", requireAuth, userRoutes);
 
 /* SERVER */
 const port = Number(process.env.PORT) || 3001;
-app.listen(port, "0.0.0.0", () => {
-  const dbInfo = getDatabaseRuntimeInfo();
-  const schemaSegment = dbInfo.schema ? `, schema=${dbInfo.schema}` : "";
-  const hostSegment = dbInfo.host ? dbInfo.host : "unknown-host";
-  const portSegment = dbInfo.port ? dbInfo.port : "unknown-port";
-  const databaseSegment = dbInfo.database ? dbInfo.database : "unknown-database";
+const startServer = async () => {
+  await backendRuntime.system.ping();
 
-  console.log(
-    `Database runtime: dialect=${dbInfo.dialect}, host=${hostSegment}, port=${portSegment}, database=${databaseSegment}${schemaSegment}`
-  );
-  console.log(`Server running on port ${port}`);
+  app.listen(port, "0.0.0.0", () => {
+    const dbInfo = getDatabaseRuntimeInfo();
+    const schemaSegment = dbInfo.schema ? `, schema=${dbInfo.schema}` : "";
+    const hostSegment = dbInfo.host ? dbInfo.host : "unknown-host";
+    const portSegment = dbInfo.port ? dbInfo.port : "unknown-port";
+    const databaseSegment = dbInfo.database ? dbInfo.database : "unknown-database";
+
+    console.log(
+      `Database runtime: dialect=${dbInfo.dialect}, host=${hostSegment}, port=${portSegment}, database=${databaseSegment}${schemaSegment}`
+    );
+    console.log(`Server running on port ${port}`);
+  });
+};
+
+startServer().catch((error) => {
+  console.error(error);
+  process.exit(1);
 });

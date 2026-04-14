@@ -1,6 +1,7 @@
 import { getBusinessTodayDate } from "./date";
 import { db, ensureIndex } from "./database";
 import { UploadedIssueAttachment } from "./issueUploads";
+import { assertSchemaReady, runtimeSchemaMutationsEnabled } from "./runtimeSchema";
 import {
   adjustStockLocationBalance,
   ensureStockLocationBalanceSchema,
@@ -696,224 +697,367 @@ const backfillStockLocationBalancesIfNeeded = () => {
 };
 
 const initializeDatabase = () => {
-  if (db.dialect === "mysql") {
-    db.exec(`
-      CREATE TABLE IF NOT EXISTS suppliers (
-        supplierId VARCHAR(64) PRIMARY KEY,
-        name VARCHAR(255) NOT NULL,
-        contactPerson VARCHAR(255) NOT NULL,
-        phone VARCHAR(64) NOT NULL,
-        email VARCHAR(255) NOT NULL,
-        categoryFocus VARCHAR(255) NOT NULL,
-        lastDeliveryDate VARCHAR(32) NOT NULL,
-        activeContracts INT NOT NULL
-      ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
-
-      CREATE TABLE IF NOT EXISTS branches (
-        branchId VARCHAR(64) PRIMARY KEY,
-        name VARCHAR(255) NOT NULL UNIQUE,
-        code VARCHAR(64) NOT NULL UNIQUE,
-        address VARCHAR(255) NOT NULL,
-        region VARCHAR(128) NOT NULL,
-        contactPerson VARCHAR(255) NOT NULL,
-        phone VARCHAR(64) NOT NULL,
-        status VARCHAR(32) NOT NULL
-      ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
-
-      CREATE TABLE IF NOT EXISTS receiving_receipts (
-        receiptId VARCHAR(64) PRIMARY KEY,
-        receiptType VARCHAR(32) NOT NULL,
-        supplierId VARCHAR(64) NOT NULL,
-        supplierName VARCHAR(255) NOT NULL,
-        arrivalDate VARCHAR(32) NOT NULL,
-        signedBy VARCHAR(255) NOT NULL,
-        receivedBy VARCHAR(255) NOT NULL,
-        itemCount INT NOT NULL,
-        totalQuantity INT NOT NULL,
-        totalAmount DOUBLE NOT NULL,
-        documentCount INT NOT NULL,
-        documentStatus VARCHAR(32) NOT NULL,
-        status VARCHAR(32) NOT NULL
-      ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
-
-      CREATE TABLE IF NOT EXISTS hq_stock_items (
-        stockId VARCHAR(64) PRIMARY KEY,
-        itemName VARCHAR(255) NOT NULL UNIQUE,
-        category VARCHAR(128) NOT NULL,
-        totalQuantity INT NOT NULL,
-        serializedUnits INT NOT NULL,
-        nonSerializedUnits INT NOT NULL,
-        supplierName VARCHAR(255) NOT NULL,
-        lastArrivalDate VARCHAR(32) NOT NULL,
-        storageLocation VARCHAR(255) NOT NULL,
-        status VARCHAR(32) NOT NULL
-      ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
-
-      CREATE TABLE IF NOT EXISTS issue_records (
-        issueId VARCHAR(64) PRIMARY KEY,
-        itemName VARCHAR(255) NOT NULL,
-        serialNumber VARCHAR(255) NOT NULL,
-        destinationType VARCHAR(32) NOT NULL,
-        branchId VARCHAR(64) NULL,
-        issuedTo VARCHAR(255) NOT NULL,
-        issuedBy VARCHAR(255) NOT NULL,
-        address VARCHAR(255) NOT NULL,
-        issueDate VARCHAR(32) NOT NULL,
-        attachmentNames LONGTEXT NOT NULL,
-        notes TEXT NULL,
-        acknowledgedBy VARCHAR(255) NULL,
-        acknowledgedAt VARCHAR(32) NULL,
-        acknowledgementNotes TEXT NULL,
-        returnedBy VARCHAR(255) NULL,
-        returnedAt VARCHAR(32) NULL,
-        returnNotes TEXT NULL,
-        status VARCHAR(32) NOT NULL
-      ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
-
-      CREATE TABLE IF NOT EXISTS attachments (
-        attachmentId VARCHAR(64) PRIMARY KEY,
-        entityType VARCHAR(64) NOT NULL,
-        entityId VARCHAR(64) NOT NULL,
-        originalName VARCHAR(255) NOT NULL,
-        storedName VARCHAR(255) NOT NULL,
-        storagePath VARCHAR(512) NOT NULL,
-        mimeType VARCHAR(128) NOT NULL,
-        fileSize INT NOT NULL,
-        uploadedAt VARCHAR(32) NOT NULL
-      ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
-
-      CREATE TABLE IF NOT EXISTS hq_serial_assets (
-        assetId VARCHAR(64) PRIMARY KEY,
-        stockId VARCHAR(64) NOT NULL,
-        itemName VARCHAR(255) NOT NULL,
-        serialNumber VARCHAR(255) NOT NULL UNIQUE,
-        supplierName VARCHAR(255) NOT NULL,
-        lastArrivalDate VARCHAR(32) NOT NULL,
-        storageLocation VARCHAR(255) NOT NULL,
-        status VARCHAR(32) NOT NULL,
-        issueId VARCHAR(64) NULL
-      ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
-
-      CREATE TABLE IF NOT EXISTS stock_movements (
-        movementId VARCHAR(64) PRIMARY KEY,
-        movementType VARCHAR(64) NOT NULL,
-        stockId VARCHAR(64) NOT NULL,
-        itemName VARCHAR(255) NOT NULL,
-        quantityDelta INT NOT NULL,
-        movementDate VARCHAR(32) NOT NULL,
-        referenceType VARCHAR(64) NOT NULL,
-        referenceId VARCHAR(64) NOT NULL,
-        storageLocation VARCHAR(255) NULL,
-        serialNumbers LONGTEXT NULL,
-        notes TEXT NULL
-      ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci
-    `);
-
-    ensureStockLocationBalanceSchema(db);
-
-    migrateIssueRecordsTableIfNeeded();
-
-    const stockMovementColumns = getTableColumns("stock_movements");
-
-    if (
-      stockMovementColumns.length > 0 &&
-      !stockMovementColumns.includes("storageLocation")
-    ) {
+  if (runtimeSchemaMutationsEnabled()) {
+    if (db.dialect === "mysql") {
       db.exec(`
-        ALTER TABLE stock_movements
-        ADD COLUMN storageLocation VARCHAR(255)
+        CREATE TABLE IF NOT EXISTS suppliers (
+          supplierId VARCHAR(64) PRIMARY KEY,
+          name VARCHAR(255) NOT NULL,
+          contactPerson VARCHAR(255) NOT NULL,
+          phone VARCHAR(64) NOT NULL,
+          email VARCHAR(255) NOT NULL,
+          categoryFocus VARCHAR(255) NOT NULL,
+          lastDeliveryDate VARCHAR(32) NOT NULL,
+          activeContracts INT NOT NULL
+        ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
+
+        CREATE TABLE IF NOT EXISTS branches (
+          branchId VARCHAR(64) PRIMARY KEY,
+          name VARCHAR(255) NOT NULL UNIQUE,
+          code VARCHAR(64) NOT NULL UNIQUE,
+          address VARCHAR(255) NOT NULL,
+          region VARCHAR(128) NOT NULL,
+          contactPerson VARCHAR(255) NOT NULL,
+          phone VARCHAR(64) NOT NULL,
+          status VARCHAR(32) NOT NULL
+        ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
+
+        CREATE TABLE IF NOT EXISTS receiving_receipts (
+          receiptId VARCHAR(64) PRIMARY KEY,
+          receiptType VARCHAR(32) NOT NULL,
+          supplierId VARCHAR(64) NOT NULL,
+          supplierName VARCHAR(255) NOT NULL,
+          arrivalDate VARCHAR(32) NOT NULL,
+          signedBy VARCHAR(255) NOT NULL,
+          receivedBy VARCHAR(255) NOT NULL,
+          itemCount INT NOT NULL,
+          totalQuantity INT NOT NULL,
+          totalAmount DOUBLE NOT NULL,
+          documentCount INT NOT NULL,
+          documentStatus VARCHAR(32) NOT NULL,
+          status VARCHAR(32) NOT NULL
+        ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
+
+        CREATE TABLE IF NOT EXISTS hq_stock_items (
+          stockId VARCHAR(64) PRIMARY KEY,
+          itemName VARCHAR(255) NOT NULL UNIQUE,
+          category VARCHAR(128) NOT NULL,
+          totalQuantity INT NOT NULL,
+          serializedUnits INT NOT NULL,
+          nonSerializedUnits INT NOT NULL,
+          supplierName VARCHAR(255) NOT NULL,
+          lastArrivalDate VARCHAR(32) NOT NULL,
+          storageLocation VARCHAR(255) NOT NULL,
+          status VARCHAR(32) NOT NULL
+        ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
+
+        CREATE TABLE IF NOT EXISTS issue_records (
+          issueId VARCHAR(64) PRIMARY KEY,
+          itemName VARCHAR(255) NOT NULL,
+          serialNumber VARCHAR(255) NOT NULL,
+          destinationType VARCHAR(32) NOT NULL,
+          branchId VARCHAR(64) NULL,
+          issuedTo VARCHAR(255) NOT NULL,
+          issuedBy VARCHAR(255) NOT NULL,
+          address VARCHAR(255) NOT NULL,
+          issueDate VARCHAR(32) NOT NULL,
+          attachmentNames LONGTEXT NOT NULL,
+          notes TEXT NULL,
+          acknowledgedBy VARCHAR(255) NULL,
+          acknowledgedAt VARCHAR(32) NULL,
+          acknowledgementNotes TEXT NULL,
+          returnedBy VARCHAR(255) NULL,
+          returnedAt VARCHAR(32) NULL,
+          returnNotes TEXT NULL,
+          status VARCHAR(32) NOT NULL
+        ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
+
+        CREATE TABLE IF NOT EXISTS attachments (
+          attachmentId VARCHAR(64) PRIMARY KEY,
+          entityType VARCHAR(64) NOT NULL,
+          entityId VARCHAR(64) NOT NULL,
+          originalName VARCHAR(255) NOT NULL,
+          storedName VARCHAR(255) NOT NULL,
+          storagePath VARCHAR(512) NOT NULL,
+          mimeType VARCHAR(128) NOT NULL,
+          fileSize INT NOT NULL,
+          uploadedAt VARCHAR(32) NOT NULL
+        ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
+
+        CREATE TABLE IF NOT EXISTS hq_serial_assets (
+          assetId VARCHAR(64) PRIMARY KEY,
+          stockId VARCHAR(64) NOT NULL,
+          itemName VARCHAR(255) NOT NULL,
+          serialNumber VARCHAR(255) NOT NULL UNIQUE,
+          supplierName VARCHAR(255) NOT NULL,
+          lastArrivalDate VARCHAR(32) NOT NULL,
+          storageLocation VARCHAR(255) NOT NULL,
+          status VARCHAR(32) NOT NULL,
+          issueId VARCHAR(64) NULL
+        ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
+
+        CREATE TABLE IF NOT EXISTS stock_movements (
+          movementId VARCHAR(64) PRIMARY KEY,
+          movementType VARCHAR(64) NOT NULL,
+          stockId VARCHAR(64) NOT NULL,
+          itemName VARCHAR(255) NOT NULL,
+          quantityDelta INT NOT NULL,
+          movementDate VARCHAR(32) NOT NULL,
+          referenceType VARCHAR(64) NOT NULL,
+          referenceId VARCHAR(64) NOT NULL,
+          storageLocation VARCHAR(255) NULL,
+          serialNumbers LONGTEXT NULL,
+          notes TEXT NULL
+        ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci
       `);
+
+      ensureStockLocationBalanceSchema(db);
+
+      migrateIssueRecordsTableIfNeeded();
+
+      const stockMovementColumns = getTableColumns("stock_movements");
+
+      if (
+        stockMovementColumns.length > 0 &&
+        !stockMovementColumns.includes("storageLocation")
+      ) {
+        db.exec(`
+          ALTER TABLE stock_movements
+          ADD COLUMN storageLocation VARCHAR(255)
+        `);
+      }
     }
+
+    ensureIndex("hq_serial_assets", "idx_hq_serial_assets_item_status", [
+      "itemName",
+      "status",
+    ]);
+    ensureIndex("attachments", "idx_attachments_entity", [
+      "entityType",
+      "entityId",
+    ]);
+    ensureIndex("stock_movements", "idx_stock_movements_reference", [
+      "referenceType",
+      "referenceId",
+    ]);
+    ensureIndex("stock_movements", "idx_stock_movements_stock_date", [
+      "stockId",
+      "movementDate",
+    ]);
+    ensureIndex("issue_records", "idx_issue_records_status", [
+      "status",
+      "issueDate",
+    ]);
+    ensureIndex("issue_records", "idx_issue_records_branch", [
+      "branchId",
+      "destinationType",
+    ]);
+
+    const supplierCount =
+      db.prepare("SELECT COUNT(*) AS count FROM suppliers").get().count || 0;
+    const branchCount =
+      db.prepare("SELECT COUNT(*) AS count FROM branches").get().count || 0;
+
+    if (supplierCount === 0) {
+      const insertSupplier = db.prepare(`
+        INSERT INTO suppliers (
+          supplierId,
+          name,
+          contactPerson,
+          phone,
+          email,
+          categoryFocus,
+          lastDeliveryDate,
+          activeContracts
+        ) VALUES (?, ?, ?, ?, ?, ?, ?, ?)
+      `);
+
+      supplierSeeds.forEach((supplier) => {
+        insertSupplier.run(
+          supplier.supplierId,
+          supplier.name,
+          supplier.contactPerson,
+          supplier.phone,
+          supplier.email,
+          supplier.categoryFocus,
+          supplier.lastDeliveryDate,
+          supplier.activeContracts
+        );
+      });
+    }
+
+    if (branchCount === 0) {
+      const insertBranch = db.prepare(`
+        INSERT INTO branches (
+          branchId,
+          name,
+          code,
+          address,
+          region,
+          contactPerson,
+          phone,
+          status
+        ) VALUES (?, ?, ?, ?, ?, ?, ?, ?)
+      `);
+
+      branchSeeds.forEach((branch) => {
+        insertBranch.run(
+          branch.branchId,
+          branch.name,
+          branch.code,
+          branch.address,
+          branch.region,
+          branch.contactPerson,
+          branch.phone,
+          branch.status
+        );
+      });
+    }
+
+    backfillIssueRecordBranchIds();
+    backfillStockLocationBalancesIfNeeded();
   }
 
-  ensureIndex("hq_serial_assets", "idx_hq_serial_assets_item_status", [
-    "itemName",
-    "status",
+  assertSchemaReady("Operations", [
+    {
+      tableName: "suppliers",
+      requiredColumns: [
+        "supplierId",
+        "name",
+        "contactPerson",
+        "phone",
+        "email",
+        "categoryFocus",
+        "lastDeliveryDate",
+        "activeContracts",
+      ],
+    },
+    {
+      tableName: "branches",
+      requiredColumns: [
+        "branchId",
+        "name",
+        "code",
+        "address",
+        "region",
+        "contactPerson",
+        "phone",
+        "status",
+      ],
+    },
+    {
+      tableName: "receiving_receipts",
+      requiredColumns: [
+        "receiptId",
+        "receiptType",
+        "supplierId",
+        "supplierName",
+        "arrivalDate",
+        "signedBy",
+        "receivedBy",
+        "itemCount",
+        "totalQuantity",
+        "totalAmount",
+        "documentCount",
+        "documentStatus",
+        "status",
+      ],
+    },
+    {
+      tableName: "hq_stock_items",
+      requiredColumns: [
+        "stockId",
+        "itemName",
+        "category",
+        "totalQuantity",
+        "serializedUnits",
+        "nonSerializedUnits",
+        "supplierName",
+        "lastArrivalDate",
+        "storageLocation",
+        "status",
+      ],
+    },
+    {
+      tableName: "issue_records",
+      requiredColumns: [
+        "issueId",
+        "itemName",
+        "serialNumber",
+        "destinationType",
+        "branchId",
+        "issuedTo",
+        "issuedBy",
+        "address",
+        "issueDate",
+        "attachmentNames",
+        "notes",
+        "acknowledgedBy",
+        "acknowledgedAt",
+        "acknowledgementNotes",
+        "returnedBy",
+        "returnedAt",
+        "returnNotes",
+        "status",
+      ],
+    },
+    {
+      tableName: "hq_serial_assets",
+      requiredColumns: [
+        "assetId",
+        "stockId",
+        "itemName",
+        "serialNumber",
+        "supplierName",
+        "lastArrivalDate",
+        "storageLocation",
+        "status",
+        "issueId",
+      ],
+    },
+    {
+      tableName: "attachments",
+      requiredColumns: [
+        "attachmentId",
+        "entityType",
+        "entityId",
+        "originalName",
+        "storedName",
+        "storagePath",
+        "mimeType",
+        "fileSize",
+        "uploadedAt",
+      ],
+    },
+    {
+      tableName: "stock_movements",
+      requiredColumns: [
+        "movementId",
+        "movementType",
+        "stockId",
+        "itemName",
+        "quantityDelta",
+        "movementDate",
+        "referenceType",
+        "referenceId",
+        "storageLocation",
+        "serialNumbers",
+        "notes",
+      ],
+    },
+    {
+      tableName: "hq_stock_location_balances",
+      requiredColumns: [
+        "balanceId",
+        "stockId",
+        "storageLocation",
+        "totalQuantity",
+        "serializedUnits",
+        "nonSerializedUnits",
+        "lastMovementDate",
+      ],
+    },
   ]);
-  ensureIndex("attachments", "idx_attachments_entity", [
-    "entityType",
-    "entityId",
-  ]);
-  ensureIndex("stock_movements", "idx_stock_movements_reference", [
-    "referenceType",
-    "referenceId",
-  ]);
-  ensureIndex("stock_movements", "idx_stock_movements_stock_date", [
-    "stockId",
-    "movementDate",
-  ]);
-  ensureIndex("issue_records", "idx_issue_records_status", [
-    "status",
-    "issueDate",
-  ]);
-  ensureIndex("issue_records", "idx_issue_records_branch", [
-    "branchId",
-    "destinationType",
-  ]);
-
-  const supplierCount =
-    db.prepare("SELECT COUNT(*) AS count FROM suppliers").get().count || 0;
-  const branchCount =
-    db.prepare("SELECT COUNT(*) AS count FROM branches").get().count || 0;
-
-  if (supplierCount === 0) {
-    const insertSupplier = db.prepare(`
-      INSERT INTO suppliers (
-        supplierId,
-        name,
-        contactPerson,
-        phone,
-        email,
-        categoryFocus,
-        lastDeliveryDate,
-        activeContracts
-      ) VALUES (?, ?, ?, ?, ?, ?, ?, ?)
-    `);
-
-    supplierSeeds.forEach((supplier) => {
-      insertSupplier.run(
-        supplier.supplierId,
-        supplier.name,
-        supplier.contactPerson,
-        supplier.phone,
-        supplier.email,
-        supplier.categoryFocus,
-        supplier.lastDeliveryDate,
-        supplier.activeContracts
-      );
-    });
-  }
-
-  if (branchCount === 0) {
-    const insertBranch = db.prepare(`
-      INSERT INTO branches (
-        branchId,
-        name,
-        code,
-        address,
-        region,
-        contactPerson,
-        phone,
-        status
-      ) VALUES (?, ?, ?, ?, ?, ?, ?, ?)
-    `);
-
-    branchSeeds.forEach((branch) => {
-      insertBranch.run(
-        branch.branchId,
-        branch.name,
-        branch.code,
-        branch.address,
-        branch.region,
-        branch.contactPerson,
-        branch.phone,
-        branch.status
-      );
-    });
-  }
-
-  backfillIssueRecordBranchIds();
-  backfillStockLocationBalancesIfNeeded();
 };
 
 initializeDatabase();

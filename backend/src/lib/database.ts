@@ -172,7 +172,8 @@ const createMySqlDatabase = (): DatabaseLike => {
   };
 
   const createDatabaseIfMissing =
-    process.env.MYSQL_AUTO_CREATE_DATABASE !== "false";
+    process.env.MYSQL_AUTO_CREATE_DATABASE === "true" ||
+    process.env.ALLOW_RUNTIME_SCHEMA_MUTATIONS === "true";
 
   if (createDatabaseIfMissing) {
     const bootstrapConnection = new SyncMySql({

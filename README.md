@@ -25,5 +25,8 @@ This repository powers the Omari HQ inventory workflow: receiving goods into HQ,
 - Backend env template: `backend/.env.example`
 - Verified during regression and smoke testing with MySQL 8.0
 - Current backend driver expects an application user configured with `mysql_native_password`
+- Bootstrap schema and seed baseline data explicitly with `cd backend && npm run db:bootstrap`
+- Verify schema readiness before deploys with `cd backend && npm run db:verify`
+- Normal runtime and verification are fail-fast: they do not create the database, tables, or repair data implicitly
 
-The backend now expects MySQL credentials to be configured before startup. Regression coverage also runs against ephemeral MySQL instances, so the repo uses one database engine end to end.
+The backend now expects MySQL credentials to be configured before startup. Runtime API startup no longer creates or repairs tables implicitly; bootstrap and verification happen through the explicit backend scripts above. Regression coverage also runs against ephemeral MySQL instances, so the repo uses one database engine end to end.

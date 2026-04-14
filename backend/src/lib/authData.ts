@@ -2,6 +2,7 @@ import bcrypt from "bcryptjs";
 import jwt from "jsonwebtoken";
 import { AUTH_TOKEN_TTL_SECONDS } from "./authConstants";
 import { db, ensureIndex } from "./database";
+import { assertSchemaReady, runtimeSchemaMutationsEnabled } from "./runtimeSchema";
 
 const AUTH_TOKEN_TTL = `${AUTH_TOKEN_TTL_SECONDS}s`;
 const allowedRoles = ["SUPER_ADMIN", "ADMIN", "USER", "VIEWER"] as const;
@@ -88,27 +89,47 @@ const getJwtSecret = () => {
 };
 
 const ensureAuthSchema = () => {
-  if (db.dialect === "sqlserver") {
-    return;
+  if (runtimeSchemaMutationsEnabled()) {
+    if (db.dialect === "sqlserver") {
+      return;
+    }
+
+    db.exec(`
+      CREATE TABLE IF NOT EXISTS auth_users (
+        userId VARCHAR(64) PRIMARY KEY,
+        username VARCHAR(64) NOT NULL UNIQUE,
+        name VARCHAR(255) NOT NULL,
+        email VARCHAR(255) NOT NULL UNIQUE,
+        passwordHash VARCHAR(255) NOT NULL,
+        role VARCHAR(32) NOT NULL,
+        status VARCHAR(32) NOT NULL DEFAULT 'Active',
+        createdAt VARCHAR(32) NOT NULL,
+        updatedAt VARCHAR(32) NOT NULL,
+        lastLogin VARCHAR(32) NULL
+      ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci
+    `);
+
+    ensureIndex("auth_users", "idx_auth_users_username", ["username"]);
+    ensureIndex("auth_users", "idx_auth_users_email", ["email"]);
   }
 
-  db.exec(`
-    CREATE TABLE IF NOT EXISTS auth_users (
-      userId VARCHAR(64) PRIMARY KEY,
-      username VARCHAR(64) NOT NULL UNIQUE,
-      name VARCHAR(255) NOT NULL,
-      email VARCHAR(255) NOT NULL UNIQUE,
-      passwordHash VARCHAR(255) NOT NULL,
-      role VARCHAR(32) NOT NULL,
-      status VARCHAR(32) NOT NULL DEFAULT 'Active',
-      createdAt VARCHAR(32) NOT NULL,
-      updatedAt VARCHAR(32) NOT NULL,
-      lastLogin VARCHAR(32) NULL
-    ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci
-  `);
-
-  ensureIndex("auth_users", "idx_auth_users_username", ["username"]);
-  ensureIndex("auth_users", "idx_auth_users_email", ["email"]);
+  assertSchemaReady("Authentication", [
+    {
+      tableName: "auth_users",
+      requiredColumns: [
+        "userId",
+        "username",
+        "name",
+        "email",
+        "passwordHash",
+        "role",
+        "status",
+        "createdAt",
+        "updatedAt",
+        "lastLogin",
+      ],
+    },
+  ]);
 };
 
 ensureAuthSchema();

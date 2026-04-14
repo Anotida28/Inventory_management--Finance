@@ -137,6 +137,9 @@ class RuntimeWorkerPool {
 const runtimeWorkerPool = new RuntimeWorkerPool();
 
 export const backendRuntime = {
+  system: {
+    ping: () => runtimeWorkerPool.call<{ ok: boolean }>("system.ping"),
+  },
   auth: {
     authenticateToken: (token: string) =>
       runtimeWorkerPool.call<AuthUser>("auth.authenticateToken", token),

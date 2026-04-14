@@ -1,129 +1,155 @@
-# EC2 Setup Instructions
+# EC2 Production Deployment
 
-## 1. Connect to EC2 Instance via EC2 Instance Connect
+These steps are for running the backend API in production on EC2 with PM2. The goal is to build the TypeScript app once, verify the database is ready, and run `dist/index.js` with `NODE_ENV=production`.
 
-## 2. Install Node Version Manager (nvm) and Node.js
+## 1. Connect to the Instance
 
-- **Switch to superuser and install nvm:**
+Use EC2 Instance Connect or SSH, then switch to the application user you want PM2 to run under.
 
-```
-sudo su -
+## 2. Install Node.js and Git
+
+Install `nvm`, then install the current LTS release of Node.js:
+
+```bash
 curl -o- https://raw.githubusercontent.com/nvm-sh/nvm/v0.39.7/install.sh | bash
-```
-
-- **Activate nvm:**
-
-```
 . ~/.nvm/nvm.sh
-```
-
-- **Install the latest version of Node.js using nvm:**
-
-```
-nvm install node
-```
-
-- **Verify that Node.js and npm are installed:**
-
-```
+nvm install --lts
+nvm use --lts
 node -v
 npm -v
 ```
 
-## 3. Install Git
+Install Git:
 
-- **Update the system and install Git:**
-
-```
+```bash
 sudo yum update -y
 sudo yum install git -y
-```
-
-- **Check Git version:**
-
-```
 git --version
 ```
 
-- **Clone your code repository from GitHub:**
+## 3. Clone the Repository
 
-```
-git clone [your-github-link]
-```
+Clone into a path without spaces to make shell commands easier:
 
-- **Navigate to the directory and install packages:**
-
-```
-cd inventory-management
-npm i
+```bash
+git clone <your-github-url> inventory-management-finance
+cd inventory-management-finance/backend
 ```
 
-- **Create Env File and Port 80:**
+## 4. Install Backend Dependencies
 
-```
-echo "PORT=80" > .env
-```
+Install exactly what the lockfile declares:
 
-- **Start the application:**
-
-```
-npm start
+```bash
+npm ci
 ```
 
-## 4. Install pm2 (Production Process Manager for Node.js)
+## 5. Create the Backend Environment File
 
-- **Install pm2 globally:**
+Start from the template:
 
-```
-npm i pm2 -g
-```
-
-- **Create a pm2 ecosystem configuration file (inside backend directory):**
-
-```
-module.exports = { apps : [{ name: 'inventory-management', script: 'npm', args: 'run dev', env: { NODE_ENV: 'development', ENV_VAR1: 'environment-variable', } }], };
+```bash
+cp .env.example .env
 ```
 
-- **Modify the ecosystem file if necessary:**
+Set production values before starting the API. At a minimum, configure:
 
-```
-nano ecosystem.config.js
+- `PORT=3001`
+- `JWT_SECRET=<long-random-secret>`
+- `CORS_ORIGIN=<your-frontend-origin>`
+- `PUBLIC_API_BASE_URL=<public-api-origin>`
+- `AUTH_COOKIE_SECURE=true`
+- `AUTH_COOKIE_SAME_SITE=lax`
+- `MYSQL_HOST=<mysql-host>`
+- `MYSQL_PORT=3306`
+- `MYSQL_DATABASE=<database-name>`
+- `MYSQL_USER=<database-user>`
+- `MYSQL_PASSWORD=<database-password>`
+- `MYSQL_AUTO_CREATE_DATABASE=false`
+
+If the frontend and API are served from different sites, use `AUTH_COOKIE_SAME_SITE=none` and keep `AUTH_COOKIE_SECURE=true`.
+
+## 6. Build, Bootstrap, and Verify
+
+Run the production build:
+
+```bash
+npm run build
 ```
 
-- **Set pm2 to restart automatically on system reboot:**
+For a first deployment or after intentional schema changes, run:
 
+```bash
+npm run db:bootstrap
 ```
+
+Before starting the API, verify that the database is reachable and fully prepared:
+
+```bash
+npm run db:verify
+```
+
+`db:bootstrap` is allowed to create schema, seed baseline data, and run one-off repair steps. `db:verify` is check-only and should be safe to run during deploys.
+
+## 7. Install and Configure PM2
+
+Install PM2 globally:
+
+```bash
+npm install -g pm2
+```
+
+The repo already includes a production-focused PM2 config in `backend/ecosystem.config.js`. It runs the compiled server from `dist/index.js` with `NODE_ENV=production`.
+
+Start the API:
+
+```bash
+pm2 start ecosystem.config.js --env production
+pm2 save
+```
+
+Enable PM2 on reboot:
+
+```bash
 sudo env PATH=$PATH:$(which node) $(which pm2) startup systemd -u $USER --hp $(eval echo ~$USER)
+pm2 save
 ```
 
-- **Start the application using the pm2 ecosystem configuration:**
+Useful PM2 commands:
 
+```bash
+pm2 status
+pm2 logs inventory-management-api
+pm2 restart inventory-management-api
+pm2 reload ecosystem.config.js --env production
+pm2 delete inventory-management-api
 ```
-pm2 start ecosystem.config.js
+
+## 8. Deploying Updates
+
+For normal code updates:
+
+```bash
+cd ~/inventory-management-finance/backend
+git pull
+npm ci
+npm run build
+npm run db:verify
+pm2 reload ecosystem.config.js --env production
 ```
 
-- **Useful pm2 commands:**
+If the release includes intentional schema or seed changes:
 
-  - **Stop all processes:**
+```bash
+npm run db:bootstrap
+npm run db:verify
+pm2 reload ecosystem.config.js --env production
+```
 
-  ```
-  pm2 stop all
-  ```
+## 9. Production Notes
 
-  - **Delete all processes:**
-
-  ```
-  pm2 delete all
-  ```
-
-  - **Check status of processes:**
-
-  ```
-  pm2 status
-  ```
-
-  - **Monitor processes:**
-
-  ```
-  pm2 monit
-  ```
+- Do not run `npm run dev` on EC2 for production traffic.
+- Do not set `NODE_ENV=development` in PM2.
+- Do not bind the backend directly to port `80`; run it on an app port such as `3001` and place Nginx or another reverse proxy in front of it.
+- Keep `backend/.env` out of version control.
+- Treat `backend/dist/` as a build artifact, not committed source.

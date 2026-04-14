@@ -9,6 +9,7 @@ if (!parentPort) {
 }
 
 const methods = {
+  "system.ping": () => ({ ok: true }),
   "auth.authenticateToken": (token) => {
     const payload = authData.verifyAccessToken(token);
     const user = authData.getUserByIdData(payload.sub);

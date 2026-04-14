@@ -8,7 +8,8 @@ import {
   useVerifyReceivingReceiptMutation,
 } from "@/services/api";
 import { DataGrid, GridColDef } from "@mui/x-data-grid";
-import { FileCheck2, Paperclip, Upload } from "lucide-react";
+import { FileCheck2, Paperclip, Search, Upload } from "lucide-react";
+import { useSearchParams } from "next/navigation";
 import numeral from "numeral";
 import { useEffect, useMemo, useRef, useState } from "react";
 import BatchReceiptPanel from "./BatchReceiptPanel";
@@ -120,44 +121,94 @@ const columns: GridColDef<ReceivingReceipt>[] = [
 ];
 
 const Receiving = () => {
+  const searchParams = useSearchParams();
   const { data: receipts, isLoading, isError } = useGetReceivingReceiptsQuery();
   const [addReceivingReceiptAttachments, { isLoading: isUploadingDocuments }] =
     useAddReceivingReceiptAttachmentsMutation();
   const [verifyReceivingReceipt, { isLoading: isVerifyingReceipt }] =
     useVerifyReceivingReceiptMutation();
   const [selectedReceiptId, setSelectedReceiptId] = useState<string | null>(null);
+  const [searchTerm, setSearchTerm] = useState("");
   const [attachmentFiles, setAttachmentFiles] = useState<File[]>([]);
   const [actionError, setActionError] = useState<string | null>(null);
   const [actionSuccess, setActionSuccess] = useState<string | null>(null);
   const fileInputRef = useRef<HTMLInputElement | null>(null);
+  const highlightedReceiptId = searchParams.get("receiptId");
 
   useEffect(() => {
-    if (!receipts || receipts.length === 0) {
+    setSearchTerm(searchParams.get("search") ?? "");
+  }, [searchParams]);
+
+  const filteredReceipts = useMemo(() => {
+    if (!receipts) {
+      return [];
+    }
+
+    const normalizedSearch = searchTerm.trim().toLowerCase();
+
+    if (!normalizedSearch) {
+      return receipts;
+    }
+
+    return receipts.filter((receipt) => {
+      const searchableValues = [
+        receipt.receiptId,
+        receipt.receiptType,
+        receipt.supplierName,
+        receipt.arrivalDate,
+        receipt.signedBy,
+        receipt.receivedBy,
+        receipt.documentStatus,
+        receipt.status,
+      ];
+
+      return searchableValues.some((value) =>
+        value.toLowerCase().includes(normalizedSearch)
+      );
+    });
+  }, [receipts, searchTerm]);
+
+  useEffect(() => {
+    if (filteredReceipts.length === 0) {
       setSelectedReceiptId(null);
       return;
     }
 
     if (
-      !selectedReceiptId ||
-      !receipts.some((receipt) => receipt.receiptId === selectedReceiptId)
+      highlightedReceiptId &&
+      filteredReceipts.some((receipt) => receipt.receiptId === highlightedReceiptId)
     ) {
-      setSelectedReceiptId(receipts[0].receiptId);
+      if (selectedReceiptId !== highlightedReceiptId) {
+        setSelectedReceiptId(highlightedReceiptId);
+      }
+      return;
     }
-  }, [receipts, selectedReceiptId]);
+
+    if (
+      !selectedReceiptId ||
+      !filteredReceipts.some((receipt) => receipt.receiptId === selectedReceiptId)
+    ) {
+      setSelectedReceiptId(filteredReceipts[0].receiptId);
+    }
+  }, [filteredReceipts, highlightedReceiptId, selectedReceiptId]);
 
   const selectedReceipt = useMemo(
     () =>
-      receipts?.find((receipt) => receipt.receiptId === selectedReceiptId) ?? null,
-    [receipts, selectedReceiptId]
+      filteredReceipts.find((receipt) => receipt.receiptId === selectedReceiptId) ??
+      null,
+    [filteredReceipts, selectedReceiptId]
   );
 
-  const batchCount = receipts?.filter((receipt) => receipt.receiptType === "Batch")
-    .length ?? 0;
-  const singleItemCount = receipts ? receipts.length - batchCount : 0;
-  const pendingDocuments =
-    receipts?.filter((receipt) => receipt.documentStatus !== "Complete").length ?? 0;
-  const totalValue =
-    receipts?.reduce((sum, receipt) => sum + receipt.totalAmount, 0) ?? 0;
+  const batchCount =
+    filteredReceipts.filter((receipt) => receipt.receiptType === "Batch").length ?? 0;
+  const singleItemCount = filteredReceipts.length - batchCount;
+  const pendingDocuments = filteredReceipts.filter(
+    (receipt) => receipt.documentStatus !== "Complete"
+  ).length;
+  const totalValue = filteredReceipts.reduce(
+    (sum, receipt) => sum + receipt.totalAmount,
+    0
+  );
 
   const handleUploadDocuments = async () => {
     if (!selectedReceipt || attachmentFiles.length === 0) {
@@ -460,23 +511,42 @@ const Receiving = () => {
         )}
       </div>
 
-      <DataGrid
-        rows={receipts}
-        columns={columns}
-        getRowId={(row) => row.receiptId}
-        onRowClick={(params) => setSelectedReceiptId(String(params.row.receiptId))}
-        disableRowSelectionOnClick
-        initialState={{
-          pagination: {
-            paginationModel: {
-              page: 0,
-              pageSize: 10,
+      <div className="space-y-4 rounded-2xl border border-gray-100 bg-white p-5 shadow">
+        <div className="flex flex-col gap-3 md:flex-row md:items-center md:justify-between">
+          <div className="relative w-full md:max-w-md">
+            <Search className="absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-gray-400" />
+            <input
+              type="search"
+              value={searchTerm}
+              onChange={(event) => setSearchTerm(event.target.value)}
+              placeholder="Filter by receipt, supplier, staff, or status"
+              className="w-full rounded-xl border border-gray-300 bg-white py-2.5 pl-10 pr-4 text-sm text-gray-700 outline-none transition focus:border-blue-500"
+            />
+          </div>
+          <p className="text-sm text-gray-500">
+            {filteredReceipts.length} matching receipt
+            {filteredReceipts.length === 1 ? "" : "s"}
+          </p>
+        </div>
+
+        <DataGrid
+          rows={filteredReceipts}
+          columns={columns}
+          getRowId={(row) => row.receiptId}
+          onRowClick={(params) => setSelectedReceiptId(String(params.row.receiptId))}
+          disableRowSelectionOnClick
+          initialState={{
+            pagination: {
+              paginationModel: {
+                page: 0,
+                pageSize: 10,
+              },
             },
-          },
-        }}
-        pageSizeOptions={[10, 25, 50]}
-        className="bg-white shadow rounded-lg border border-gray-200 !text-gray-700"
-      />
+          }}
+          pageSizeOptions={[10, 25, 50]}
+          className="!text-gray-700"
+        />
+      </div>
     </div>
   );
 };

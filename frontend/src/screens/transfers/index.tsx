@@ -20,9 +20,11 @@ import {
   ClipboardCheck,
   Paperclip,
   RotateCcw,
+  Search,
   Store,
   Truck,
 } from "lucide-react";
+import { useSearchParams } from "next/navigation";
 import { FormEvent, useEffect, useMemo, useRef, useState } from "react";
 
 type IssueFormData = {
@@ -178,6 +180,7 @@ const printIssueSlip = (issue: IssueRecord) => {
 };
 
 const Transfers = () => {
+  const searchParams = useSearchParams();
   const {
     data: issueRecords,
     isLoading: isLoadingIssues,
@@ -213,7 +216,38 @@ const Transfers = () => {
   const [actionError, setActionError] = useState<string | null>(null);
   const [actionSuccess, setActionSuccess] = useState<string | null>(null);
   const [selectedIssueId, setSelectedIssueId] = useState<string | null>(null);
+  const [searchTerm, setSearchTerm] = useState("");
   const fileInputRef = useRef<HTMLInputElement | null>(null);
+  const highlightedIssueId = searchParams.get("issueId");
+
+  useEffect(() => {
+    setSearchTerm(searchParams.get("search") ?? "");
+  }, [searchParams]);
+
+  const filteredIssueRecords = useMemo(() => {
+    const normalizedSearch = searchTerm.trim().toLowerCase();
+
+    if (!normalizedSearch) {
+      return issueRecords ?? [];
+    }
+
+    return (issueRecords ?? []).filter((issue) => {
+      const searchableValues = [
+        issue.issueId,
+        issue.itemName,
+        issue.serialNumber,
+        issue.issuedTo,
+        issue.issuedBy,
+        issue.address,
+        issue.status,
+        issue.branchId ?? "",
+      ];
+
+      return searchableValues.some((value) =>
+        value.toLowerCase().includes(normalizedSearch)
+      );
+    });
+  }, [issueRecords, searchTerm]);
 
   const activeBranches = useMemo(
     () => branches?.filter((branch) => branch.status === "Active") ?? [],
@@ -247,46 +281,58 @@ const Transfers = () => {
   );
   const selectedIssue = useMemo(
     () =>
-      issueRecords?.find((issue) => issue.issueId === selectedIssueId) ?? null,
-    [issueRecords, selectedIssueId]
+      filteredIssueRecords.find((issue) => issue.issueId === selectedIssueId) ??
+      null,
+    [filteredIssueRecords, selectedIssueId]
   );
   const branchIssueCount = useMemo(
     () =>
-      issueRecords?.filter((issue) => issue.destinationType === "Branch")
-        .length ?? 0,
-    [issueRecords]
+      filteredIssueRecords.filter((issue) => issue.destinationType === "Branch")
+        .length,
+    [filteredIssueRecords]
   );
   const pendingAcknowledgementCount = useMemo(
-    () => issueRecords?.filter((issue) => issue.status === "Issued").length ?? 0,
-    [issueRecords]
+    () =>
+      filteredIssueRecords.filter((issue) => issue.status === "Issued").length,
+    [filteredIssueRecords]
   );
   const returnedIssueCount = useMemo(
     () =>
-      issueRecords?.filter((issue) => issue.status === "Returned").length ?? 0,
-    [issueRecords]
+      filteredIssueRecords.filter((issue) => issue.status === "Returned").length,
+    [filteredIssueRecords]
   );
   const attachmentBackedIssueCount = useMemo(
     () =>
-      issueRecords?.filter(
+      filteredIssueRecords.filter(
         (issue) =>
           issue.attachments.length > 0 || issue.attachmentNames.length > 0
-      ).length ?? 0,
-    [issueRecords]
+      ).length,
+    [filteredIssueRecords]
   );
 
   useEffect(() => {
-    if (!issueRecords || issueRecords.length === 0) {
+    if (!filteredIssueRecords.length) {
       setSelectedIssueId(null);
       return;
     }
 
     if (
-      !selectedIssueId ||
-      !issueRecords.some((issue) => issue.issueId === selectedIssueId)
+      highlightedIssueId &&
+      filteredIssueRecords.some((issue) => issue.issueId === highlightedIssueId)
     ) {
-      setSelectedIssueId(issueRecords[0].issueId);
+      if (selectedIssueId !== highlightedIssueId) {
+        setSelectedIssueId(highlightedIssueId);
+      }
+      return;
     }
-  }, [issueRecords, selectedIssueId]);
+
+    if (
+      !selectedIssueId ||
+      !filteredIssueRecords.some((issue) => issue.issueId === selectedIssueId)
+    ) {
+      setSelectedIssueId(filteredIssueRecords[0].issueId);
+    }
+  }, [filteredIssueRecords, highlightedIssueId, selectedIssueId]);
 
   useEffect(() => {
     if (formData.destinationType === "Branch") {
@@ -992,23 +1038,42 @@ const Transfers = () => {
         </div>
       </div>
 
-      <DataGrid
-        rows={issueRecords}
-        columns={columns}
-        getRowId={(row) => row.issueId}
-        onRowClick={(params) => setSelectedIssueId(params.row.issueId)}
-        disableRowSelectionOnClick
-        pageSizeOptions={[5, 10, 25]}
-        initialState={{
-          pagination: {
-            paginationModel: {
-              page: 0,
-              pageSize: 10,
+      <div className="space-y-4 rounded-2xl border border-gray-100 bg-white p-5 shadow">
+        <div className="flex flex-col gap-3 md:flex-row md:items-center md:justify-between">
+          <div className="relative w-full md:max-w-md">
+            <Search className="absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-gray-400" />
+            <input
+              type="search"
+              value={searchTerm}
+              onChange={(event) => setSearchTerm(event.target.value)}
+              placeholder="Filter by issue ref, item, serial, destination, or status"
+              className="w-full rounded-xl border border-gray-300 bg-white py-2.5 pl-10 pr-4 text-sm text-gray-700 outline-none transition focus:border-blue-500"
+            />
+          </div>
+          <p className="text-sm text-gray-500">
+            {filteredIssueRecords.length} matching issue record
+            {filteredIssueRecords.length === 1 ? "" : "s"}
+          </p>
+        </div>
+
+        <DataGrid
+          rows={filteredIssueRecords}
+          columns={columns}
+          getRowId={(row) => row.issueId}
+          onRowClick={(params) => setSelectedIssueId(params.row.issueId)}
+          disableRowSelectionOnClick
+          pageSizeOptions={[5, 10, 25]}
+          initialState={{
+            pagination: {
+              paginationModel: {
+                page: 0,
+                pageSize: 10,
+              },
             },
-          },
-        }}
-        className="bg-white shadow rounded-lg border border-gray-200 !text-gray-700"
-      />
+          }}
+          className="!text-gray-700"
+        />
+      </div>
     </div>
   );
 };

@@ -17,6 +17,7 @@ import {
   Search,
   ScanBarcode,
 } from "lucide-react";
+import { useSearchParams } from "next/navigation";
 import { useEffect, useState } from "react";
 
 const columns: GridColDef<HqStockItem>[] = [
@@ -44,11 +45,13 @@ const formatMovementLabel = (movement: StockMovementRecord) => {
 };
 
 const Inventory = () => {
+  const searchParams = useSearchParams();
   const { data: stock, isError, isLoading } = useGetHqStockQuery();
   const [selectedStockId, setSelectedStockId] = useState<string | null>(null);
   const [searchTerm, setSearchTerm] = useState("");
   const [statusFilter, setStatusFilter] = useState("All");
   const [categoryFilter, setCategoryFilter] = useState("All");
+  const highlightedStockId = searchParams.get("stockId");
   const {
     data: selectedStock,
     isFetching: isFetchingStockDetail,
@@ -57,41 +60,27 @@ const Inventory = () => {
   });
 
   useEffect(() => {
-    if (!stock || stock.length === 0) {
-      setSelectedStockId(null);
-      return;
-    }
+    setSearchTerm(searchParams.get("search") ?? "");
+  }, [searchParams]);
 
-    if (!selectedStockId || !stock.some((item) => item.stockId === selectedStockId)) {
-      setSelectedStockId(stock[0].stockId);
-    }
-  }, [selectedStockId, stock]);
-
-  if (isLoading) {
-    return <div className="py-4">Loading...</div>;
-  }
-
-  if (isError || !stock) {
-    return (
-      <div className="text-center text-red-500 py-4">
-        Failed to fetch HQ stock
-      </div>
-    );
-  }
-
-  const totalUnits = stock.reduce((sum, item) => sum + item.totalQuantity, 0);
-  const serializedUnits = stock.reduce(
+  const stockItems = stock ?? [];
+  const totalUnits = stockItems.reduce((sum, item) => sum + item.totalQuantity, 0);
+  const serializedUnits = stockItems.reduce(
     (sum, item) => sum + item.serializedUnits,
     0
   );
-  const lowStockItems = stock.filter((item) => item.status === "Low Stock").length;
+  const lowStockItems = stockItems.filter(
+    (item) => item.status === "Low Stock"
+  ).length;
   const storageLocationCount = new Set(
-    stock.flatMap((item) => item.storageLocations)
+    stockItems.flatMap((item) => item.storageLocations)
   ).size;
-  const categoryOptions = Array.from(new Set(stock.map((item) => item.category))).sort();
+  const categoryOptions = Array.from(
+    new Set(stockItems.map((item) => item.category))
+  ).sort();
 
   const normalizedSearch = searchTerm.trim().toLowerCase();
-  const filteredStock = stock.filter((item) => {
+  const filteredStock = stockItems.filter((item) => {
     const matchesSearch =
       !normalizedSearch ||
       item.itemName.toLowerCase().includes(normalizedSearch) ||
@@ -106,6 +95,42 @@ const Inventory = () => {
 
     return matchesSearch && matchesStatus && matchesCategory;
   });
+
+  useEffect(() => {
+    if (!filteredStock.length) {
+      setSelectedStockId(null);
+      return;
+    }
+
+    if (
+      highlightedStockId &&
+      filteredStock.some((item) => item.stockId === highlightedStockId)
+    ) {
+      if (selectedStockId !== highlightedStockId) {
+        setSelectedStockId(highlightedStockId);
+      }
+      return;
+    }
+
+    if (
+      !selectedStockId ||
+      !filteredStock.some((item) => item.stockId === selectedStockId)
+    ) {
+      setSelectedStockId(filteredStock[0].stockId);
+    }
+  }, [filteredStock, highlightedStockId, selectedStockId]);
+
+  if (isLoading) {
+    return <div className="py-4">Loading...</div>;
+  }
+
+  if (isError || !stock) {
+    return (
+      <div className="text-center text-red-500 py-4">
+        Failed to fetch HQ stock
+      </div>
+    );
+  }
 
   return (
     <div className="space-y-5 pb-5">
@@ -185,6 +210,10 @@ const Inventory = () => {
             ))}
           </select>
         </div>
+        <p className="mt-3 text-sm text-gray-500">
+          {filteredStock.length} matching stock item
+          {filteredStock.length === 1 ? "" : "s"}
+        </p>
       </div>
 
       <div className="grid grid-cols-1 xl:grid-cols-[1.45fr,1fr] gap-5">

@@ -1,12 +1,18 @@
 module.exports = {
   apps: [
     {
-      name: "inventory-management",
-      script: "npm",
-      args: "run dev",
-      env: {
-        NODE_ENV: "development",
-        ENV_VAR1: "environment-variable",
+      name: "inventory-management-api",
+      cwd: __dirname,
+      script: "dist/index.js",
+      interpreter: "node",
+      exec_mode: "fork",
+      instances: 1,
+      autorestart: true,
+      watch: false,
+      time: true,
+      max_memory_restart: "512M",
+      env_production: {
+        NODE_ENV: "production",
       },
     },
   ],
