@@ -5,6 +5,7 @@ import type {
   AuthResponse,
   AuthUser,
   CreateUserRequest,
+  ExternalUserSyncRequest,
   LoginRequest,
   RegisterRequest,
 } from "./authData";
@@ -153,6 +154,8 @@ export const backendRuntime = {
       runtimeWorkerPool.call<AuthResponse>("auth.loginUser", payload),
     registerInitialUser: (payload: RegisterRequest) =>
       runtimeWorkerPool.call<AuthResponse>("auth.registerInitialUser", payload),
+    syncExternalUser: (payload: ExternalUserSyncRequest) =>
+      runtimeWorkerPool.call<AuthResponse>("auth.syncExternalUser", payload),
   },
   users: {
     createUser: (payload: CreateUserRequest, actor: AuthUser) =>

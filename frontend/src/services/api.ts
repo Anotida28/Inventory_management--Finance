@@ -41,6 +41,8 @@ export interface RegisterInitialUserRequest {
 }
 
 export interface AuthBootstrapStatus {
+  authMode: "external" | "local";
+  providerLabel: string;
   userCount: number;
   requiresSetup: boolean;
 }

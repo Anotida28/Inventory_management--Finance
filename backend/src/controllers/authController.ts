@@ -5,12 +5,24 @@ import {
   clearAuthSessionCookie,
   setAuthSessionCookie,
 } from "../lib/authSessionCookie";
+import {
+  getAuthProviderLabel,
+  loginWithExternalAuth,
+  resolveAuthMode,
+} from "../lib/externalAuth";
 import { backendRuntime } from "../lib/runtimeClient";
 import type { AuthenticatedRequest } from "../middleware/authMiddleware";
 
 type AuthSessionResponse = {
   expiresIn: number;
   user: AuthUser;
+};
+
+type AuthBootstrapStatusResponse = {
+  authMode: "external" | "local";
+  providerLabel: string;
+  requiresSetup: boolean;
+  userCount: number;
 };
 
 const getErrorMessage = (error: unknown) => {
@@ -28,12 +40,24 @@ const buildSessionResponse = (authResponse: AuthResponse): AuthSessionResponse =
   user: authResponse.user,
 });
 
+const getBootstrapStatusResponse = async (): Promise<AuthBootstrapStatusResponse> => {
+  const authMode = resolveAuthMode();
+  const bootstrapStatus = await backendRuntime.auth.getAuthBootstrapStatus();
+
+  return {
+    authMode,
+    providerLabel: getAuthProviderLabel(),
+    requiresSetup: authMode === "local" ? bootstrapStatus.requiresSetup : false,
+    userCount: bootstrapStatus.userCount,
+  };
+};
+
 export const getAuthBootstrapStatus = async (
   req: Request,
   res: Response
 ): Promise<void> => {
   try {
-    res.json(await backendRuntime.auth.getAuthBootstrapStatus());
+    res.json(await getBootstrapStatusResponse());
   } catch (error) {
     res.status(500).json({ message: "Error retrieving auth status" });
   }
@@ -44,6 +68,14 @@ export const registerInitialUser = async (
   res: Response
 ): Promise<void> => {
   try {
+    if (resolveAuthMode() === "external") {
+      res.status(405).json({
+        message:
+          "Initial registration is disabled because this workspace uses Active Directory and the Omari allow list.",
+      });
+      return;
+    }
+
     const authResponse = await backendRuntime.auth.registerInitialUser({
       username: req.body.username,
       name: req.body.name,
@@ -85,10 +117,18 @@ export const registerInitialUser = async (
 
 export const login = async (req: Request, res: Response): Promise<void> => {
   try {
-    const authResponse = await backendRuntime.auth.loginUser({
-      username: req.body.username,
-      password: req.body.password,
-    });
+    const authResponse =
+      resolveAuthMode() === "external"
+        ? await backendRuntime.auth.syncExternalUser(
+            await loginWithExternalAuth({
+              username: req.body.username,
+              password: req.body.password,
+            })
+          )
+        : await backendRuntime.auth.loginUser({
+            username: req.body.username,
+            password: req.body.password,
+          });
 
     setAuthSessionCookie(res, authResponse.accessToken, {
       persistent: resolveRememberMe(req.body.rememberMe),
@@ -105,10 +145,25 @@ export const login = async (req: Request, res: Response): Promise<void> => {
     }
 
     if (
-      message === "Invalid username or password" ||
-      message === "This account is disabled"
+      message === "Invalid username or password"
     ) {
       res.status(401).json({ message });
+      return;
+    }
+
+    if (
+      message === "This account is disabled" ||
+      message === "You are not on the Omari allow list"
+    ) {
+      res.status(403).json({ message });
+      return;
+    }
+
+    if (
+      message === "External directory authentication is unavailable" ||
+      message === "Omari allow-list service is unavailable"
+    ) {
+      res.status(502).json({ message });
       return;
     }
 

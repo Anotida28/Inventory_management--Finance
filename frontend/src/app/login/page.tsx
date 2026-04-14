@@ -60,8 +60,10 @@ export default function LoginPage() {
     () => resolveNextPath(searchParams.get("next")),
     [searchParams]
   );
+  const externalAuthEnabled = bootstrapStatus?.authMode === "external";
+  const providerLabel = bootstrapStatus?.providerLabel ?? "your identity provider";
 
-  if (bootstrapStatus?.requiresSetup) {
+  if (bootstrapStatus?.authMode === "local" && bootstrapStatus.requiresSetup) {
     return (
       <AuthShell
         fitScreen
@@ -132,14 +134,33 @@ export default function LoginPage() {
   return (
     <AuthShell
       fitScreen
-      title="Welcome back"
-      subtitle="Sign in to access receiving, stock, and operations workflows."
-      footerNote={<span>Privacy policy available on request.</span>}
+      title={externalAuthEnabled ? "Corporate sign-in" : "Welcome back"}
+      subtitle={
+        externalAuthEnabled
+          ? "Use your Active Directory password. Access is granted only after both directory authentication and Omari allow-list verification succeed."
+          : "Sign in to access receiving, stock, and operations workflows."
+      }
+      footerNote={
+        <span>
+          {externalAuthEnabled
+            ? "Access is brokered through your corporate directory and the Omari allow list."
+            : "Privacy policy available on request."}
+        </span>
+      }
+      helper={
+        externalAuthEnabled ? (
+          <div className="rounded-2xl border border-indigo-100 bg-indigo-50 px-4 py-3 text-xs text-indigo-700">
+            Sign-in is validated by <strong>{providerLabel}</strong>. The app
+            only creates or refreshes your local profile after both external
+            checks pass.
+          </div>
+        ) : undefined
+      }
     >
       <form onSubmit={handleSubmit} className="space-y-5">
         <div>
           <label className="mb-2 block text-sm font-medium text-slate-700">
-            Username or email
+            {externalAuthEnabled ? "Corporate username" : "Username or email"}
           </label>
           <div className="relative">
             <UserCircle2 className="pointer-events-none absolute left-4 top-1/2 h-4 w-4 -translate-y-1/2 text-slate-400" />
@@ -147,7 +168,11 @@ export default function LoginPage() {
               className={`${inputClassName} pl-11`}
               value={identifier}
               onChange={(event) => setIdentifier(event.target.value)}
-              placeholder="om526127 or name@company.com"
+              placeholder={
+                externalAuthEnabled
+                  ? "om526127"
+                  : "om526127 or name@company.com"
+              }
               autoComplete="username"
               required
             />
@@ -165,7 +190,11 @@ export default function LoginPage() {
               type={showPassword ? "text" : "password"}
               value={password}
               onChange={(event) => setPassword(event.target.value)}
-              placeholder="Enter your password"
+              placeholder={
+                externalAuthEnabled
+                  ? "Enter your corporate password"
+                  : "Enter your password"
+              }
               autoComplete="current-password"
               required
             />
@@ -212,7 +241,7 @@ export default function LoginPage() {
             </>
           ) : (
             <>
-              Log in
+              {externalAuthEnabled ? "Continue" : "Log in"}
               <ArrowRight className="h-4 w-4" />
             </>
           )}

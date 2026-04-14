@@ -9,6 +9,7 @@ import morgan from "morgan";
 import authRoutes from "./routes/authRoutes";
 import operationsRoutes from "./routes/operationsRoutes";
 import userRoutes from "./routes/userRoutes";
+import { assertExternalAuthConfiguration } from "./lib/externalAuth";
 import { backendRuntime } from "./lib/runtimeClient";
 import { requireAuth } from "./middleware/authMiddleware";
 import { getDatabaseRuntimeInfo } from "./lib/database";
@@ -37,6 +38,7 @@ const resolveAllowedOrigins = () => {
 };
 
 getRequiredEnv("JWT_SECRET");
+assertExternalAuthConfiguration();
 
 const allowedOrigins = resolveAllowedOrigins();
 const corsOptions: CorsOptions = {

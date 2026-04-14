@@ -1,3 +1,4 @@
+import { randomUUID } from "node:crypto";
 import bcrypt from "bcryptjs";
 import jwt from "jsonwebtoken";
 import { AUTH_TOKEN_TTL_SECONDS } from "./authConstants";
@@ -40,6 +41,13 @@ export type RegisterRequest = {
 
 export type CreateUserRequest = RegisterRequest & {
   role?: AuthRole;
+};
+
+export type ExternalUserSyncRequest = {
+  email?: string;
+  name?: string;
+  role?: AuthRole;
+  username?: string;
 };
 
 export type AuthResponse = {
@@ -174,6 +182,50 @@ const getAuthUserRowById = (userId: string) => {
     .get(userId) as AuthUserRow | undefined;
 };
 
+const getAuthUserRowByUsername = (username: string) => {
+  return db
+    .prepare(
+      `
+        SELECT
+          userId,
+          username,
+          name,
+          email,
+          passwordHash,
+          role,
+          status,
+          createdAt,
+          updatedAt,
+          lastLogin
+        FROM auth_users
+        WHERE username = ?
+      `
+    )
+    .get(username) as AuthUserRow | undefined;
+};
+
+const getAuthUserRowByEmail = (email: string) => {
+  return db
+    .prepare(
+      `
+        SELECT
+          userId,
+          username,
+          name,
+          email,
+          passwordHash,
+          role,
+          status,
+          createdAt,
+          updatedAt,
+          lastLogin
+        FROM auth_users
+        WHERE email = ?
+      `
+    )
+    .get(email) as AuthUserRow | undefined;
+};
+
 const getAuthUserRowByIdentifier = (identifier: string) => {
   return db
     .prepare(
@@ -270,6 +322,11 @@ const validateCommonUserFields = (
     email,
     password,
   };
+};
+
+const isEmailOwnedByAnotherUser = (email: string, userId: string) => {
+  const existingUser = getAuthUserRowByEmail(email);
+  return Boolean(existingUser && existingUser.userId !== userId);
 };
 
 const ensureUserIsUnique = (username: string, email: string) => {
@@ -470,6 +527,119 @@ export const loginUserData = (payload: LoginRequest): AuthResponse => {
       updatedAt: lastLogin,
     })
   );
+};
+
+export const syncExternalUserData = (
+  payload: ExternalUserSyncRequest
+): AuthResponse => {
+  const username = normalizeIdentifier(payload.username);
+
+  if (!username || !isValidUsername(username)) {
+    throw new Error("External authentication did not provide a valid username");
+  }
+
+  const timestamp = new Date().toISOString();
+  const providedName = normalizeString(payload.name) || username;
+  const providedEmail = normalizeIdentifier(payload.email);
+  const fallbackEmail = `${username}@external-auth.local`;
+  const nextEmail = isValidEmail(providedEmail) ? providedEmail : fallbackEmail;
+  const existingByUsername = getAuthUserRowByUsername(username);
+  const existingByEmail = getAuthUserRowByEmail(nextEmail);
+  const existingUser = existingByUsername ?? existingByEmail;
+
+  if (existingUser) {
+    if (existingUser.status !== "Active") {
+      throw new Error("This account is disabled");
+    }
+
+    const resolvedEmail =
+      isValidEmail(nextEmail) && !isEmailOwnedByAnotherUser(nextEmail, existingUser.userId)
+        ? nextEmail
+        : existingUser.email;
+    const resolvedUsername =
+      existingByUsername || (existingByEmail && existingByEmail.userId !== existingUser.userId)
+        ? existingUser.username
+        : username;
+    const resolvedName = providedName || existingUser.name;
+
+    db.prepare(
+      `
+        UPDATE auth_users
+        SET
+          username = ?,
+          name = ?,
+          email = ?,
+          updatedAt = ?,
+          lastLogin = ?
+        WHERE userId = ?
+      `
+    ).run(
+      resolvedUsername,
+      resolvedName,
+      resolvedEmail,
+      timestamp,
+      timestamp,
+      existingUser.userId
+    );
+
+    return buildAuthResponse(
+      mapAuthUser({
+        ...existingUser,
+        username: resolvedUsername,
+        name: resolvedName,
+        email: resolvedEmail,
+        updatedAt: timestamp,
+        lastLogin: timestamp,
+      })
+    );
+  }
+
+  const requestedRole = normalizeRole(payload.role);
+  const assignedRole = requestedRole ?? (getUserCount() === 0 ? "SUPER_ADMIN" : "USER");
+  const createdUser: AuthUser = {
+    userId: getNextUserId(),
+    username,
+    name: providedName,
+    email: nextEmail,
+    role: assignedRole,
+    status: "Active",
+    createdAt: timestamp,
+    updatedAt: timestamp,
+  };
+
+  db.prepare(
+    `
+      INSERT INTO auth_users (
+        userId,
+        username,
+        name,
+        email,
+        passwordHash,
+        role,
+        status,
+        createdAt,
+        updatedAt,
+        lastLogin
+      ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+    `
+  ).run(
+    createdUser.userId,
+    createdUser.username,
+    createdUser.name,
+    createdUser.email,
+    bcrypt.hashSync(randomUUID(), 10),
+    createdUser.role,
+    createdUser.status,
+    createdUser.createdAt,
+    createdUser.updatedAt,
+    timestamp
+  );
+
+  return buildAuthResponse({
+    ...createdUser,
+    lastLogin: timestamp,
+    updatedAt: timestamp,
+  });
 };
 
 export const verifyAccessToken = (token: string): AuthTokenPayload => {

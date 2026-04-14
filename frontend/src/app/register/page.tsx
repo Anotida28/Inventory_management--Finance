@@ -53,6 +53,7 @@ export default function RegisterPage() {
   const [rememberMe, setRememberMe] = useState(false);
   const [showPassword, setShowPassword] = useState(false);
   const [submitError, setSubmitError] = useState<string | null>(null);
+  const externalAuthEnabled = bootstrapStatus?.authMode === "external";
 
   const handleSubmit = async (event: FormEvent<HTMLFormElement>) => {
     event.preventDefault();
@@ -90,6 +91,55 @@ export default function RegisterPage() {
         <div className="flex items-center gap-3 rounded-2xl border border-slate-100 bg-slate-50 px-4 py-4 text-sm text-slate-500">
           <Loader2 className="h-4 w-4 animate-spin text-indigo-600" />
           Loading bootstrap status...
+        </div>
+      </AuthShell>
+    );
+  }
+
+  if (externalAuthEnabled) {
+    return (
+      <AuthShell
+        title="Registration is handled externally"
+        subtitle="This workspace uses Active Directory plus the Omari allow list, so new users are provisioned by signing in with approved corporate credentials."
+        footerNote={
+          <Link href="/login" className="font-medium text-indigo-600">
+            Return to login
+          </Link>
+        }
+      >
+        <div className="space-y-4 rounded-3xl border border-slate-200 bg-slate-50 p-6">
+          <div className="flex items-start gap-3">
+            <div className="grid h-11 w-11 shrink-0 place-items-center rounded-2xl bg-indigo-100 text-indigo-700">
+              <BadgeCheck className="h-5 w-5" />
+            </div>
+            <div>
+              <p className="text-base font-semibold text-slate-900">
+                No local password setup is required
+              </p>
+              <p className="mt-2 text-sm leading-6 text-slate-500">
+                Ask IT to confirm the user exists in Active Directory and that
+                the username has been added to the Omari allow list. The app
+                will create or refresh the local profile automatically on the
+                first successful login.
+              </p>
+            </div>
+          </div>
+
+          <div className="flex items-center gap-2 rounded-2xl border border-slate-100 bg-white px-4 py-3 text-xs text-slate-500">
+            <AlertCircle className="h-4 w-4 shrink-0 text-indigo-500" />
+            Authentication provider:{" "}
+            <strong className="text-slate-800">
+              {bootstrapStatus?.providerLabel ?? "Active Directory"}
+            </strong>
+          </div>
+
+          <Link
+            href="/login"
+            className="inline-flex items-center gap-2 rounded-2xl bg-[linear-gradient(135deg,_#3730a3,_#4f46e5)] px-4 py-3 text-sm font-medium text-white shadow-lg shadow-indigo-500/20"
+          >
+            Back to login
+            <ArrowRight className="h-4 w-4" />
+          </Link>
         </div>
       </AuthShell>
     );
