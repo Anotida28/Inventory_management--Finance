@@ -1,8 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import { AUTH_SESSION_COOKIE_NAME } from "./src/lib/authConstants";
 
-const isPublicRoute = (pathname: string) =>
-  pathname === "/login" || pathname === "/register";
+const isPublicRoute = (pathname: string) => pathname === "/login";
 
 export function middleware(request: NextRequest) {
   const { pathname, search } = request.nextUrl;

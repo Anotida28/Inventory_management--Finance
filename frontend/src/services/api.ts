@@ -32,19 +32,9 @@ export interface LoginRequest {
   rememberMe?: boolean;
 }
 
-export interface RegisterInitialUserRequest {
-  username: string;
-  name: string;
-  email: string;
-  password: string;
-  rememberMe?: boolean;
-}
-
 export interface AuthBootstrapStatus {
-  authMode: "external" | "local";
+  authMode: "external";
   providerLabel: string;
-  userCount: number;
-  requiresSetup: boolean;
 }
 
 export interface CreateUserRequest {
@@ -404,14 +394,6 @@ export const api = createApi({
       query: () => "/auth/bootstrap-status",
       providesTags: ["AuthBootstrapStatus"],
     }),
-    registerInitialUser: build.mutation<AuthResponse, RegisterInitialUserRequest>({
-      query: (payload) => ({
-        url: "/auth/register",
-        method: "POST",
-        body: payload,
-      }),
-      invalidatesTags: ["AuthBootstrapStatus", "Users"],
-    }),
     login: build.mutation<AuthResponse, LoginRequest>({
       query: (payload) => ({
         url: "/auth/login",
@@ -559,7 +541,6 @@ export const api = createApi({
 
 export const {
   useGetAuthBootstrapStatusQuery,
-  useRegisterInitialUserMutation,
   useLoginMutation,
   useLogoutMutation,
   useGetCurrentUserQuery,

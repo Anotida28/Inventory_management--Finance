@@ -7,8 +7,7 @@ import { usePathname, useRouter } from "next/navigation";
 import { useEffect, useMemo } from "react";
 import DashboardShell from "./DashboardShell";
 
-const isPublicRoute = (pathname: string) =>
-  pathname === "/login" || pathname === "/register";
+const isPublicRoute = (pathname: string) => pathname === "/login";
 
 const AppFrame = ({ children }: { children: React.ReactNode }) => {
   const pathname = usePathname();

@@ -8,7 +8,6 @@ import {
 import {
   getAuthProviderLabel,
   loginWithExternalAuth,
-  resolveAuthMode,
 } from "../lib/externalAuth";
 import { backendRuntime } from "../lib/runtimeClient";
 import type { AuthenticatedRequest } from "../middleware/authMiddleware";
@@ -19,10 +18,8 @@ type AuthSessionResponse = {
 };
 
 type AuthBootstrapStatusResponse = {
-  authMode: "external" | "local";
+  authMode: "external";
   providerLabel: string;
-  requiresSetup: boolean;
-  userCount: number;
 };
 
 const getErrorMessage = (error: unknown) => {
@@ -40,17 +37,10 @@ const buildSessionResponse = (authResponse: AuthResponse): AuthSessionResponse =
   user: authResponse.user,
 });
 
-const getBootstrapStatusResponse = async (): Promise<AuthBootstrapStatusResponse> => {
-  const authMode = resolveAuthMode();
-  const bootstrapStatus = await backendRuntime.auth.getAuthBootstrapStatus();
-
-  return {
-    authMode,
-    providerLabel: getAuthProviderLabel(),
-    requiresSetup: authMode === "local" ? bootstrapStatus.requiresSetup : false,
-    userCount: bootstrapStatus.userCount,
-  };
-};
+const getBootstrapStatusResponse = async (): Promise<AuthBootstrapStatusResponse> => ({
+  authMode: "external",
+  providerLabel: getAuthProviderLabel(),
+});
 
 export const getAuthBootstrapStatus = async (
   req: Request,
@@ -63,72 +53,14 @@ export const getAuthBootstrapStatus = async (
   }
 };
 
-export const registerInitialUser = async (
-  req: Request,
-  res: Response
-): Promise<void> => {
-  try {
-    if (resolveAuthMode() === "external") {
-      res.status(405).json({
-        message:
-          "Initial registration is disabled because this workspace uses Active Directory and the Omari allow list.",
-      });
-      return;
-    }
-
-    const authResponse = await backendRuntime.auth.registerInitialUser({
-      username: req.body.username,
-      name: req.body.name,
-      email: req.body.email,
-      password: req.body.password,
-    });
-
-    setAuthSessionCookie(res, authResponse.accessToken, {
-      persistent: resolveRememberMe(req.body.rememberMe),
-      maxAgeSeconds: AUTH_TOKEN_TTL_SECONDS,
-    });
-
-    res.status(201).json(buildSessionResponse(authResponse));
-  } catch (error) {
-    const message = getErrorMessage(error);
-
-    if (
-      message === "The system has already been initialized" ||
-      message === "Missing required user fields" ||
-      message === "A valid email address is required" ||
-      message === "Password must be at least 8 characters long" ||
-      message.includes("Username must be")
-    ) {
-      res.status(400).json({ message });
-      return;
-    }
-
-    if (
-      message === "Username is already in use" ||
-      message === "Email is already in use"
-    ) {
-      res.status(409).json({ message });
-      return;
-    }
-
-    res.status(500).json({ message: "Error creating initial user" });
-  }
-};
-
 export const login = async (req: Request, res: Response): Promise<void> => {
   try {
-    const authResponse =
-      resolveAuthMode() === "external"
-        ? await backendRuntime.auth.syncExternalUser(
-            await loginWithExternalAuth({
-              username: req.body.username,
-              password: req.body.password,
-            })
-          )
-        : await backendRuntime.auth.loginUser({
-            username: req.body.username,
-            password: req.body.password,
-          });
+    const authResponse = await backendRuntime.auth.syncExternalUser(
+      await loginWithExternalAuth({
+        username: req.body.username,
+        password: req.body.password,
+      })
+    );
 
     setAuthSessionCookie(res, authResponse.accessToken, {
       persistent: resolveRememberMe(req.body.rememberMe),

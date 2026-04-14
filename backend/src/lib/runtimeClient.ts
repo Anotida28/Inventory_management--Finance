@@ -6,8 +6,6 @@ import type {
   AuthUser,
   CreateUserRequest,
   ExternalUserSyncRequest,
-  LoginRequest,
-  RegisterRequest,
 } from "./authData";
 import type {
   NewReceivingReceipt,
@@ -144,16 +142,8 @@ export const backendRuntime = {
   auth: {
     authenticateToken: (token: string) =>
       runtimeWorkerPool.call<AuthUser>("auth.authenticateToken", token),
-    getAuthBootstrapStatus: () =>
-      runtimeWorkerPool.call<{ requiresSetup: boolean; userCount: number }>(
-        "auth.getAuthBootstrapStatus"
-      ),
     getUserById: (userId: string) =>
       runtimeWorkerPool.call<AuthUser | undefined>("auth.getUserById", userId),
-    loginUser: (payload: LoginRequest) =>
-      runtimeWorkerPool.call<AuthResponse>("auth.loginUser", payload),
-    registerInitialUser: (payload: RegisterRequest) =>
-      runtimeWorkerPool.call<AuthResponse>("auth.registerInitialUser", payload),
     syncExternalUser: (payload: ExternalUserSyncRequest) =>
       runtimeWorkerPool.call<AuthResponse>("auth.syncExternalUser", payload),
   },

@@ -27,19 +27,11 @@ export type AuthUser = Omit<AuthUserRow, "passwordHash" | "lastLogin"> & {
   lastLogin?: string;
 };
 
-export type LoginRequest = {
-  username?: string;
-  password?: string;
-};
-
-export type RegisterRequest = {
+export type CreateUserRequest = {
   username?: string;
   name?: string;
   email?: string;
   password?: string;
-};
-
-export type CreateUserRequest = RegisterRequest & {
   role?: AuthRole;
 };
 
@@ -226,46 +218,8 @@ const getAuthUserRowByEmail = (email: string) => {
     .get(email) as AuthUserRow | undefined;
 };
 
-const getAuthUserRowByIdentifier = (identifier: string) => {
-  return db
-    .prepare(
-      `
-        SELECT
-          userId,
-          username,
-          name,
-          email,
-          passwordHash,
-          role,
-          status,
-          createdAt,
-          updatedAt,
-          lastLogin
-        FROM auth_users
-        WHERE username = ? OR email = ?
-      `
-    )
-    .get(identifier, identifier) as AuthUserRow | undefined;
-};
-
 const getUserCount = () => {
   return db.prepare("SELECT COUNT(*) AS count FROM auth_users").get().count || 0;
-};
-
-const updateUserLoginTimestamp = (userId: string) => {
-  const lastLogin = new Date().toISOString();
-
-  db.prepare(
-    `
-      UPDATE auth_users
-      SET
-        lastLogin = ?,
-        updatedAt = ?
-      WHERE userId = ?
-    `
-  ).run(lastLogin, lastLogin, userId);
-
-  return lastLogin;
 };
 
 const signAccessToken = (user: AuthUser) => {
@@ -289,9 +243,7 @@ const buildAuthResponse = (user: AuthUser): AuthResponse => ({
   user,
 });
 
-const validateCommonUserFields = (
-  payload: RegisterRequest | CreateUserRequest
-) => {
+const validateCommonUserFields = (payload: CreateUserRequest) => {
   const username = normalizeIdentifier(payload.username);
   const name = normalizeString(payload.name);
   const email = normalizeIdentifier(payload.email);
@@ -345,15 +297,6 @@ const ensureUserIsUnique = (username: string, email: string) => {
   if (duplicateByEmail) {
     throw new Error("Email is already in use");
   }
-};
-
-export const getAuthBootstrapStatusData = () => {
-  const userCount = getUserCount();
-
-  return {
-    userCount,
-    requiresSetup: userCount === 0,
-  };
 };
 
 export const getUserByIdData = (userId: string): AuthUser | undefined => {
@@ -442,91 +385,6 @@ export const createUserData = (
   );
 
   return createdUser;
-};
-
-export const registerInitialUserData = (payload: RegisterRequest): AuthResponse => {
-  if (getUserCount() > 0) {
-    throw new Error("The system has already been initialized");
-  }
-
-  const { username, name, email, password } = validateCommonUserFields(payload);
-  ensureUserIsUnique(username, email);
-
-  const timestamp = new Date().toISOString();
-  const createdUser: AuthUser = {
-    userId: getNextUserId(),
-    username,
-    name,
-    email,
-    role: "SUPER_ADMIN",
-    status: "Active",
-    createdAt: timestamp,
-    updatedAt: timestamp,
-  };
-
-  db.prepare(
-    `
-      INSERT INTO auth_users (
-        userId,
-        username,
-        name,
-        email,
-        passwordHash,
-        role,
-        status,
-        createdAt,
-        updatedAt,
-        lastLogin
-      ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
-    `
-  ).run(
-    createdUser.userId,
-    createdUser.username,
-    createdUser.name,
-    createdUser.email,
-    bcrypt.hashSync(password, 10),
-    createdUser.role,
-    createdUser.status,
-    createdUser.createdAt,
-    createdUser.updatedAt,
-    timestamp
-  );
-
-  return buildAuthResponse({
-    ...createdUser,
-    lastLogin: timestamp,
-    updatedAt: timestamp,
-  });
-};
-
-export const loginUserData = (payload: LoginRequest): AuthResponse => {
-  const identifier = normalizeIdentifier(payload.username);
-  const password =
-    typeof payload.password === "string" ? payload.password.trim() : "";
-
-  if (!identifier || !password) {
-    throw new Error("Username and password are required");
-  }
-
-  const userRow = getAuthUserRowByIdentifier(identifier);
-
-  if (!userRow || !bcrypt.compareSync(password, userRow.passwordHash)) {
-    throw new Error("Invalid username or password");
-  }
-
-  if (userRow.status !== "Active") {
-    throw new Error("This account is disabled");
-  }
-
-  const lastLogin = updateUserLoginTimestamp(userRow.userId);
-
-  return buildAuthResponse(
-    mapAuthUser({
-      ...userRow,
-      lastLogin,
-      updatedAt: lastLogin,
-    })
-  );
 };
 
 export const syncExternalUserData = (

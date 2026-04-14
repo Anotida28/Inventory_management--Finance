@@ -20,10 +20,7 @@ const methods = {
 
     return user;
   },
-  "auth.getAuthBootstrapStatus": () => authData.getAuthBootstrapStatusData(),
   "auth.getUserById": (userId) => authData.getUserByIdData(userId),
-  "auth.loginUser": (payload) => authData.loginUserData(payload),
-  "auth.registerInitialUser": (payload) => authData.registerInitialUserData(payload),
   "auth.syncExternalUser": (payload) => authData.syncExternalUserData(payload),
   "operations.acknowledgeIssueRecord": (issueId, payload) =>
     operationsData.acknowledgeIssueRecordData(issueId, payload),

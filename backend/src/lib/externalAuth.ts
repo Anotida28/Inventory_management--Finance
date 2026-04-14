@@ -1,6 +1,6 @@
 import type { AuthRole } from "./authData";
 
-export type AuthMode = "local" | "external";
+export type AuthMode = "external";
 
 export type ExternalAuthIdentity = {
   email?: string;
@@ -53,7 +53,6 @@ const EMAIL_KEYS = [
   "upn",
 ] as const;
 const ROLE_KEYS = ["role", "userRole", "accessRole"] as const;
-const truthyValues = new Set(["1", "true", "yes", "on", "external"]);
 const comparableKeySet = new Set(
   [...USERNAME_KEYS, ...NAME_KEYS, ...EMAIL_KEYS, ...ROLE_KEYS].map((key) =>
     key.toLowerCase()
@@ -331,28 +330,12 @@ const buildExternalIdentity = (
   };
 };
 
-export const resolveAuthMode = (): AuthMode => {
-  const configuredProvider = normalizeIdentifier(process.env.AUTH_PROVIDER);
-
-  if (configuredProvider === "external" || configuredProvider === "local") {
-    return configuredProvider;
-  }
-
-  return truthyValues.has(normalizeIdentifier(process.env.EXTERNAL_AUTH_ENABLED))
-    ? "external"
-    : "local";
-};
+export const resolveAuthMode = (): AuthMode => "external";
 
 export const getAuthProviderLabel = () =>
-  resolveAuthMode() === "external"
-    ? "Active Directory + Omari allow list"
-    : "Local application credentials";
+  "DA Gateway + Omari allow list";
 
 export const assertExternalAuthConfiguration = () => {
-  if (resolveAuthMode() !== "external") {
-    return;
-  }
-
   const config = getExternalAuthConfiguration();
 
   // Validate URLs early so startup fails before users hit login.

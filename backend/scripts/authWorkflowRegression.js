@@ -10,23 +10,16 @@ const main = async () => {
   try {
     const {
       createUserData,
-      getAuthBootstrapStatusData,
       listUsersData,
-      loginUserData,
-      registerInitialUserData,
+      syncExternalUserData,
       verifyAccessToken,
     } = require("../dist/lib/authData.js");
 
-    assert.deepEqual(getAuthBootstrapStatusData(), {
-      userCount: 0,
-      requiresSetup: true,
-    });
-
-    const bootstrapAuth = registerInitialUserData({
+    const bootstrapAuth = syncExternalUserData({
       name: "Admin Bootstrap",
       username: "admin.bootstrap",
       email: "admin.bootstrap@omari.co.zw",
-      password: "Password123",
+      role: "SUPER_ADMIN",
     });
 
     assert.ok(bootstrapAuth.accessToken);
@@ -34,39 +27,15 @@ const main = async () => {
     assert.equal(bootstrapAuth.user.role, "SUPER_ADMIN");
     assert.equal(bootstrapAuth.user.username, "admin.bootstrap");
 
-    assert.deepEqual(getAuthBootstrapStatusData(), {
-      userCount: 1,
-      requiresSetup: false,
+    const secondSync = syncExternalUserData({
+      username: "admin.bootstrap",
+      email: "admin.bootstrap@omari.co.zw",
+      name: "Admin Bootstrap",
     });
+    assert.equal(secondSync.user.userId, bootstrapAuth.user.userId);
+    assert.ok(secondSync.user.lastLogin);
 
-    assert.throws(
-      () =>
-        registerInitialUserData({
-          name: "Second Bootstrap",
-          username: "second.bootstrap",
-          email: "second.bootstrap@omari.co.zw",
-          password: "Password123",
-        }),
-      /The system has already been initialized/
-    );
-
-    assert.throws(
-      () =>
-        loginUserData({
-          username: "admin.bootstrap",
-          password: "wrong-password",
-        }),
-      /Invalid username or password/
-    );
-
-    const emailLogin = loginUserData({
-      username: "admin.bootstrap@omari.co.zw",
-      password: "Password123",
-    });
-    assert.equal(emailLogin.user.userId, bootstrapAuth.user.userId);
-    assert.ok(emailLogin.user.lastLogin);
-
-    const decodedToken = verifyAccessToken(emailLogin.accessToken);
+    const decodedToken = verifyAccessToken(secondSync.accessToken);
     assert.equal(decodedToken.sub, bootstrapAuth.user.userId);
     assert.equal(decodedToken.username, "admin.bootstrap");
     assert.equal(decodedToken.role, "SUPER_ADMIN");
