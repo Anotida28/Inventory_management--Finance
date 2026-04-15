@@ -12,7 +12,6 @@ import {
   getIssueRecords,
   getOperationsOverview,
   getReceivingOptions,
-  getReceivingReceiptById,
   getReceivingReceipts,
   returnIssueRecord,
   getSuppliers,
@@ -27,7 +26,6 @@ const router = Router();
 router.get("/overview", getOperationsOverview);
 router.get("/receiving-options", getReceivingOptions);
 router.get("/receipts", getReceivingReceipts);
-router.get("/receipts/:receiptId", getReceivingReceiptById);
 router.post(
   "/receipts",
   requireRole("USER", "ADMIN", "SUPER_ADMIN"),

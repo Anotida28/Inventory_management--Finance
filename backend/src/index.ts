@@ -69,9 +69,6 @@ app.use("/api/auth", authRoutes);
 app.use("/api/operations", requireAuth, operationsRoutes);
 app.use("/api/users", requireAuth, userRoutes);
 
-app.use("/operations", requireAuth, operationsRoutes);
-app.use("/users", requireAuth, userRoutes);
-
 /* SERVER */
 const port = Number(process.env.PORT) || 3001;
 const startServer = async () => {

@@ -48,8 +48,6 @@ const methods = {
   "receiving.getOperationAttachmentById": (attachmentId) =>
     receivingData.getOperationAttachmentByIdData(attachmentId),
   "receiving.getReceivingOptions": () => receivingData.getReceivingOptionsData(),
-  "receiving.getReceivingReceiptById": (receiptId) =>
-    receivingData.getReceivingReceiptByIdData(receiptId),
   "receiving.getReceivingReceipts": () =>
     receivingData.getReceivingReceiptsWithAttachmentsData(),
   "receiving.verifyReceipt": (receiptId) =>

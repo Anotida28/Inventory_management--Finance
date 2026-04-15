@@ -205,11 +205,6 @@ export const backendRuntime = {
       ),
     getReceivingOptions: () =>
       runtimeWorkerPool.call<ReceivingOptions>("receiving.getReceivingOptions"),
-    getReceivingReceiptById: (receiptId: string) =>
-      runtimeWorkerPool.call<ReceivingReceiptDetail | null>(
-        "receiving.getReceivingReceiptById",
-        receiptId
-      ),
     getReceivingReceipts: () =>
       runtimeWorkerPool.call<ReceivingReceipt[]>("receiving.getReceivingReceipts"),
     verifyReceipt: (receiptId: string) =>

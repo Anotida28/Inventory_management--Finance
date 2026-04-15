@@ -59,26 +59,6 @@ export const getReceivingOptions = async (
   }
 };
 
-export const getReceivingReceiptById = async (
-  req: Request,
-  res: Response
-): Promise<void> => {
-  try {
-    const receipt = await backendRuntime.receiving.getReceivingReceiptById(
-      req.params.receiptId
-    );
-
-    if (!receipt) {
-      res.status(404).json({ message: "Receipt not found" });
-      return;
-    }
-
-    res.json(receipt);
-  } catch (error) {
-    res.status(500).json({ message: "Error retrieving receipt detail" });
-  }
-};
-
 export const createReceivingReceipt = async (
   req: Request,
   res: Response
